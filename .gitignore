@@ -401,3 +401,5 @@ FodyWeavers.xsd
 .venv/
 sample-data/
 .env
+.deploy.env
+log.txt
