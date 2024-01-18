@@ -55,10 +55,14 @@ class DatabaseEngine:
 
         cursor.execute("""
             insert into [$vector].[index] 
-                ([id], [type], [class], [data], [item_count], [vector_dimensions], [data_version], [saved_on]) 
+                ([id], [source_table_name], [id_column_name], [vector_column_name], [type], [class], [data], [item_count], [vector_dimensions], [data_version], [saved_on]) 
             values 
-                (?, ?, ?, ?, ?, ?, ?, sysdatetime());""", 
-            self._index_id, index_type, index_class, index_bin, vectors_count, dimensions_count, version)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, sysdatetime());""", 
+            self._index_id, 
+            self._source_table_fqname,
+            self._source_id_column_name,
+            self._source_vector_column_name,
+            index_type, index_class, index_bin, vectors_count, dimensions_count, version)
         conn.commit()
 
         cursor.close()
@@ -236,7 +240,7 @@ class DatabaseEngine:
         """)
         cursor.close()
         conn.commit()
-        _logger.info(f"Function created...")
+        _logger.info(f"Function created.")
 
     def get_changes(self, from_version:int = 0):
         EMBEDDINGS = self._configuration

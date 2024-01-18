@@ -11,6 +11,9 @@ if object_id('[$vector].[index]') is null begin
     create table [$vector].[index]
     (
         [id] int not null,
+        [source_table_name] sysname not null,
+        [id_column_name] sysname not null,
+        [vector_column_name] sysname not null,
         [type] varchar(50) not null,
         [class] varchar(50) not null,
         [data] varbinary(max) not null,
