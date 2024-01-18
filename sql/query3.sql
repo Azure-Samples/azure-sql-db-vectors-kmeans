@@ -1,0 +1,1 @@
+select id, [type], [class], item_count, vector_dimensions, data_version, saved_on from [$vector].[index]

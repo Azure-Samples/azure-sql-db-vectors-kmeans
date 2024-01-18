@@ -1,0 +1,20 @@
+{
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "app",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/conda/bin/python"
+      }
+    }
+  },
+  "forwardPorts": [
+    1433,
+    3000
+  ],
+  "postCreateCommand": "bash .devcontainer/mssql/postCreateCommand.sh 'Passw0rd!' './.devcontainer/mssql'"
+}
