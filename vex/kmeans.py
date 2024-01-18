@@ -66,7 +66,7 @@ class KMeansIndex(BaseIndex):
         
         _logger.info(f"Loading index #{self._index_id}...")
         
-        pkl, version = self._db.load_index(self._index_id, 'kmeans')   
+        pkl, version = self._db.load_index()   
         
         if pkl == None:
             _logger.info("No index found.")
