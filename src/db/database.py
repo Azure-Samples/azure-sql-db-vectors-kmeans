@@ -2,33 +2,57 @@ import os
 import pyodbc
 import logging
 import json
-from .utils import Buffer, VectorSet, NpEncoder
+from .utils import Buffer, VectorSet, NpEncoder, DataSourceConfig
 
 _logger = logging.getLogger("uvicorn")
 
 class DatabaseEngine:
-    def __init__(self, configuration) -> None:
+
+    def __init__(self, config:DataSourceConfig) -> None:
         self._connection_string = os.environ["MSSQL"]
-        self._index_id = configuration["ID"]
-        self._configuration = configuration["DATASOURCE"]
-        self._source_table_fqname = f'[{self._configuration["SCHEMA"]}].[{self._configuration["TABLE"]}]'
-        self._source_id_column_name = self._configuration["COLUMN"]["ID"]
-        self._source_vector_column_name = self._configuration["COLUMN"]["VECTOR"]
-        self._target_table_name = f'{self._configuration["TABLE"]}${self._source_vector_column_name}'
+        self._index_id = None
+        self._source_table_schema = config.source_table_schema
+        self._source_table_name = config.source_table_name
+        self._source_id_column_name = config.source_id_column_name
+        self._source_vector_column_name = config.source_vector_column_name
+        self._vector_dimensions = config.vector_dimensions
+        self._source_table_fqname = f'[{self._source_table_schema}].[{self._source_table_name}]'
+        self._target_table_name = f'{self._source_table_name}${self._source_vector_column_name}'
         self._function_fqname=f'[$vector].[find_similar${self._target_table_name}]'
         self._embeddings_table_fqname = f'[$vector].[{self._target_table_name}]'
         self._clusters_centroids_table_fqname = f'[$vector].[{self._target_table_name}$clusters_centroids]'
         self._clusters_table_fqname = f'[$vector].[{self._target_table_name}$clusters]'  
 
     def initialize(self): 
-        conn = pyodbc.connect(self._connection_string) 
-        cursor = conn.cursor()  
-        cursor.execute(f"""
-            SELECT 1                 
-        """)
-        cursor.close()
-        conn.commit()
-        conn.close()
+        conn = pyodbc.connect(self._connection_string)
+        try:        
+            cursor = conn.cursor()  
+            cursor.execute(f"""
+                if schema_id('$vector') is null begin
+                    exec('create schema [$vector] authorization dbo')
+                end
+                if schema_id('$tmp') is null begin
+                    exec('create schema [$tmp] authorization dbo')
+                end           
+                if object_id('[$vector].[kmeans]') is null begin
+                    create table [$vector].[kmeans]
+                    (
+                        [id] int identity not null,
+                        [source_table_name] sysname not null,
+                        [id_column_name] sysname not null,
+                        [vector_column_name] sysname not null,
+                        [item_count] int null,
+                        [status] varchar(100) not null,
+                        [updated_on] datetime2 not null,
+                        primary key nonclustered ([id]),
+                        unique nonclustered ([source_table_name], [vector_column_name])
+                    )
+                end             
+            """)
+            cursor.close()
+            conn.commit()
+        finally:
+            conn.close()
         
     def get_info(self):
         return {
@@ -46,56 +70,63 @@ class DatabaseEngine:
             }
         }
     
-    def save_index(self, index_type, index_class, index_bin, vectors_count:int, dimensions_count:int, version:int):
+    def update_index_metadata(self, vectors_count:int):
         conn = pyodbc.connect(self._connection_string) 
 
         cursor = conn.cursor()  
-        cursor.execute("delete from [$vector].[index] where id = ?", self._index_id)
-        conn.commit()
-
         cursor.execute("""
-            insert into [$vector].[index] 
-                ([id], [source_table_name], [id_column_name], [vector_column_name], [type], [class], [data], [item_count], [vector_dimensions], [data_version], [saved_on]) 
-            values 
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, sysdatetime());""", 
+            update 
+                [$vector].[kmeans] 
+            set
+                [item_count] = ?,
+                [status] = 'CREATED',
+                [updated_on] = sysdatetime()
+            where 
+                id = ?;""", 
+            vectors_count, 
             self._index_id, 
-            self._source_table_fqname,
-            self._source_id_column_name,
-            self._source_vector_column_name,
-            index_type, index_class, index_bin, vectors_count, dimensions_count, version)
+            )
         conn.commit()
 
         cursor.close()
         conn.close()
 
-    def load_index(self):
+    def create_index_metadata(self) -> int:
+        id = None
         conn = pyodbc.connect(self._connection_string) 
-        cursor = conn.cursor()  
 
-        row = cursor.execute(f"select [data], [data_version] from [$vector].[index] where id = ?", self._index_id).fetchone()
-        if row == None:
-            return None, 0
-        pkl = row[0]
-        version = row[1]
-        cursor.close()
-        conn.close()
-
-        return pkl, version
+        try:
+            cursor = conn.cursor()  
+            id = cursor.execute("""
+                set nocount on;
+                insert into [$vector].[kmeans] 
+                    ([source_table_name], [id_column_name], [vector_column_name], [status], [updated_on])
+                values
+                    (?, ?, ?, 'INITIALIZING', sysdatetime());
+                select scope_identity() as id;
+                """,
+                self._source_table_fqname,
+                self._source_id_column_name,
+                self._source_vector_column_name  
+            ).fetchval()
+            cursor.close()
+            conn.commit()
+        finally:
+            conn.close()
+        
+        self._index_id = id
+        return id
+    
     
     def load_vectors_from_db(self):    
-        #_logger.info(f"Configuration: {self._configuration}")
-        conn = pyodbc.connect(self._connection_string) 
-        cursor = conn.cursor()  
-        current_version = cursor.execute("select change_tracking_current_version() as current_version;").fetchval() or 0
-        cursor.close()
-
         query = f"""
             select {self._source_id_column_name} as item_id, {self._source_vector_column_name} as vector from {self._source_table_fqname} 
         """
+        buffer = Buffer()    
+        result = VectorSet(self._vector_dimensions)
+        conn = pyodbc.connect(self._connection_string) 
         cursor = conn.cursor()
         cursor.execute(query)
-        buffer = Buffer()    
-        result = VectorSet(self._configuration["VECTOR"]["DIMENSIONS"])
         while(True):
             buffer.clear()    
             rows = cursor.fetchmany(10000)
@@ -107,13 +138,14 @@ class DatabaseEngine:
                 buffer.add(row.item_id, json.loads(row.vector))
             
             result.add(buffer)            
+
             mf = int(result.get_memory_usage() / 1024 / 1024)
             _logger.info("Loaded {0} rows, total memory footprint {1} MB".format(idx+1, mf))        
 
         cursor.close()
         conn.commit()
         conn.close()
-        return current_version, result.ids, result.vectors
+        return result.ids, result.vectors
     
     def save_clusters_centroids(self, centroids):
         conn = pyodbc.connect(self._connection_string)         
@@ -123,14 +155,21 @@ class DatabaseEngine:
         
         #cursor.fast_executemany = True        
         _logger.info(f"Saving centroids to {self._clusters_centroids_table_fqname}...")
-        cursor.execute(f"drop table if exists {self._clusters_centroids_table_fqname}")
         cursor.execute(f"""
-            create table {self._clusters_centroids_table_fqname} (
-                cluster_id int not null,
-                vector_value_id int not null,
-                vector_value float not null
-            )
-        """)
+            if object_id('{self._clusters_centroids_table_fqname}') is null begin
+                create table {self._clusters_centroids_table_fqname}
+                (
+                    cluster_id int not null,
+                    vector_value_id int not null,
+                    vector_value float not null
+                )
+            end    
+            """)
+        cursor.commit()
+        cursor.execute(f"truncate table {self._clusters_centroids_table_fqname}")
+        cursor.commit()
+        cursor.execute(f"drop index ixcc on {self._clusters_centroids_table_fqname}")
+        cursor.commit()
         cursor.executemany(f"""    
             insert into {self._clusters_centroids_table_fqname} (cluster_id, vector_value_id, vector_value) 
             select 
@@ -147,10 +186,11 @@ class DatabaseEngine:
         cursor.execute(f"""
             create clustered columnstore index ixcc on {self._clusters_centroids_table_fqname} order (cluster_id, vector_value_id) with (maxdop = 1)                     
         """)
-        conn.commit()
+        cursor.commit()
         cursor.close()
         conn.close()
         _logger.info("Columnstore index created.")
+        _logger.info("Centroids saved.")
 
     def save_clusters_items(self, ids, labels):
         clustered_ids = dict(zip(ids, labels))
@@ -173,6 +213,7 @@ class DatabaseEngine:
         cursor.close()
         conn.commit()
         _logger.info("Index created.")
+        _logger.info("Centroids elements saved.")
 
     def create_similarity_function(self):
         conn = pyodbc.connect(self._connection_string)         
@@ -241,67 +282,3 @@ class DatabaseEngine:
         cursor.close()
         conn.commit()
         _logger.info(f"Function created.")
-
-    def get_changes(self, from_version:int = 0):
-        EMBEDDINGS = self._configuration
-        query = f"""
-        declare @fromVersion int = ?
-        declare @reason int = 0
-
-        declare @curVer int = change_tracking_current_version();
-        declare @minVer int = change_tracking_min_valid_version(object_id('[{EMBEDDINGS["SCHEMA"]}].[{EMBEDDINGS["TABLE"]}]'));
-
-        -- Full rebuild needed
-        if (@fromVersion < @minVer) begin
-            set @reason = 2
-        end
-
-        -- No Changes
-        if (@fromVersion = @curVer) begin
-            set @reason = 1
-        end
-
-        if (@reason > 0)
-        begin
-            select
-                @curVer as 'Metadata.Sync.Version',
-                'None' as 'Metadata.Sync.Type',
-                @reason as 'Metadata.Sync.ReasonCode'        
-            for
-                json path, without_array_wrapper
-        end else begin
-            declare @result nvarchar(max) = ((
-            select
-                @curVer as 'Metadata.Sync.Version',
-                'Diff' as 'Metadata.Sync.Type',
-                @reason as 'Metadata.Sync.ReasonCode',       
-                [Data] = json_query((
-                    select 
-                        ct.SYS_CHANGE_OPERATION as '$operation',
-                        ct.SYS_CHANGE_VERSION as '$version',
-                        ct.[{EMBEDDINGS['COLUMN']['ID']}] as id, 
-                        t.[{EMBEDDINGS['COLUMN']['VECTOR']}] as vector
-                    from 
-                        [{EMBEDDINGS["SCHEMA"]}].[{EMBEDDINGS["TABLE"]}] as t 
-                    right outer join 
-                        changetable(changes [{EMBEDDINGS["SCHEMA"]}].[{EMBEDDINGS["TABLE"]}] , @fromVersion) as ct on ct.[{EMBEDDINGS['COLUMN']['ID']}] = t.[{EMBEDDINGS['COLUMN']['ID']}]
-                    for 
-                        json path
-                ))
-            for
-                json path, without_array_wrapper
-            ))
-            select @result as result
-        end
-        """
-            
-        conn = pyodbc.connect(self._connection_string)     
-        cursor = conn.cursor()
-        #print(from_version)
-        cursor.execute(query, from_version)
-        result = cursor.fetchone()
-        result = json.loads(result[0])
-        cursor.close()
-        conn.close()
-        return result
-

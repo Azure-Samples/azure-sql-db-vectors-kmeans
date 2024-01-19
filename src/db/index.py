@@ -6,13 +6,7 @@ class BaseIndex:
         self.substatus:IndexSubStatus = IndexSubStatus.NONE
         self._index_num:int = None
  
-    def create(self):
-        pass
-
-    def update(self):
-        pass
-
-    def load(self): 
+    def build(self):
         pass
 
     def get_status(self):

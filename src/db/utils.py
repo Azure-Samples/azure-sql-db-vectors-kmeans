@@ -2,6 +2,13 @@ import json
 import numpy as np
 from enum import StrEnum, Enum
 
+class DataSourceConfig:
+    source_table_schema:str
+    source_table_name:str
+    source_id_column_name:str
+    source_vector_column_name:str
+    vector_dimensions:int
+    
 class IndexStatus(StrEnum):
     INITIALIZING = 'initializing'
     NOT_READY = 'not ready'

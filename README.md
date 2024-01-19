@@ -10,6 +10,10 @@
 https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/manage-environment-variables
 
 
+cd src
+uvicorn main:api --reload
+
+
 (short, 1-3 sentenced, description of the project)
 
 ## Features

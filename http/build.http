@@ -1,0 +1,13 @@
+{
+  "table": {
+    "schema": "dbo",
+    "table": "wikipedia_articles_embeddings"
+  },
+  "column": {
+    "id": "id",
+    "vector": "content_vector"
+  },
+  "vector": {
+    "dimensions": 1536
+  }
+}
