@@ -1,0 +1,6 @@
+.devcontainer/
+.azure/
+.github/
+__pycache__/
+infra/
+sample-data/

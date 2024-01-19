@@ -3,7 +3,7 @@ version: '3'
 services:
   app:
     build: 
-      context: ../.
+      context: ../src
       dockerfile: Dockerfile
     volumes:
       - ../..:/workspaces:cached
@@ -27,7 +27,7 @@ services:
       SA_PASSWORD: Passw0rd!
       ACCEPT_EULA: Y
     volumes:
-      - ../sample-data:/sample-data:cached
+      - ../src/sample-data:/sample-data:cached
 
     # Add "forwardPorts": ["1433"] to **devcontainer.json** to forward MSSQL locally.
     # (Adding the "ports" property to this file will not forward from a Codespace.)

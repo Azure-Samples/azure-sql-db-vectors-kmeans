@@ -1,7 +1,0 @@
-scikit-learn 
-pyodbc 
-uvicorn[standard] 
-python-multipart 
-python-dotenv 
-fastapi 
-apscheduler

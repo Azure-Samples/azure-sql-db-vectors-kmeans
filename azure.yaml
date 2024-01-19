@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: azure-sql-db-vectors-kmeans
+metadata:
+  template: azure-sql-db-vectors-kmeans@0.0.1
+services:
+  kmeans:
+    project: ./src
+    language: py
+    host: containerapp
