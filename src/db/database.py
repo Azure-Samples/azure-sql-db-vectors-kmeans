@@ -15,13 +15,15 @@ class DatabaseEngine:
         self._source_table_name = config.source_table_name
         self._source_id_column_name = config.source_id_column_name
         self._source_vector_column_name = config.source_vector_column_name
-        self._vector_dimensions = config.vector_dimensions
+        self._vector_dimensions = config.vector_dimensions        
         self._source_table_fqname = f'[{self._source_table_schema}].[{self._source_table_name}]'
         self._target_table_name = f'{self._source_table_name}${self._source_vector_column_name}'
         self._function_fqname=f'[$vector].[find_similar${self._target_table_name}]'
-        self._embeddings_table_fqname = f'[$vector].[{self._target_table_name}]'
+        self._embeddings_table_fqname = f'[{self._source_table_schema}].[{self._target_table_name}]'
         self._clusters_centroids_table_fqname = f'[$vector].[{self._target_table_name}$clusters_centroids]'
+        self._clusters_centroids_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters_centroids]'
         self._clusters_table_fqname = f'[$vector].[{self._target_table_name}$clusters]'  
+        self._clusters_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters]'  
 
     def initialize(self): 
         conn = pyodbc.connect(self._connection_string)
@@ -70,7 +72,7 @@ class DatabaseEngine:
             }
         }
     
-    def update_index_metadata(self, vectors_count:int):
+    def finalize_index_metadata(self, vectors_count:int):
         conn = pyodbc.connect(self._connection_string) 
 
         cursor = conn.cursor()  
@@ -84,6 +86,25 @@ class DatabaseEngine:
             where 
                 id = ?;""", 
             vectors_count, 
+            self._index_id, 
+            )
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+    
+    def update_index_metadata(self, status:str):
+        conn = pyodbc.connect(self._connection_string) 
+
+        cursor = conn.cursor()  
+        cursor.execute("""
+            update 
+                [$vector].[kmeans] 
+            set                
+                [status] = ?                
+            where 
+                id = ?;""", 
+            status, 
             self._index_id, 
             )
         conn.commit()
@@ -118,7 +139,7 @@ class DatabaseEngine:
         return id
     
     
-    def load_vectors_from_db(self):    
+    def load_vectors_from_db(self):            
         query = f"""
             select {self._source_id_column_name} as item_id, {self._source_vector_column_name} as vector from {self._source_table_fqname} 
         """
@@ -147,7 +168,7 @@ class DatabaseEngine:
         conn.close()
         return result.ids, result.vectors
     
-    def save_clusters_centroids(self, centroids):
+    def save_clusters_centroids(self, centroids):                
         conn = pyodbc.connect(self._connection_string)         
         cursor = conn.cursor()  
         params = [(i, json.dumps(centroids[i], cls=NpEncoder)) for i in range(0, len(centroids))]
@@ -163,15 +184,18 @@ class DatabaseEngine:
                     vector_value_id int not null,
                     vector_value float not null
                 )
-            end    
+            end   
+            drop table if exists {self._clusters_centroids_tmp_table_fqname} 
+            create table {self._clusters_centroids_tmp_table_fqname}
+                (
+                    cluster_id int not null,
+                    vector_value_id int not null,
+                    vector_value float not null
+                )
             """)
         cursor.commit()
-        cursor.execute(f"truncate table {self._clusters_centroids_table_fqname}")
-        cursor.commit()
-        cursor.execute(f"drop index ixcc on {self._clusters_centroids_table_fqname}")
-        cursor.commit()
         cursor.executemany(f"""    
-            insert into {self._clusters_centroids_table_fqname} (cluster_id, vector_value_id, vector_value) 
+            insert into {self._clusters_centroids_tmp_table_fqname} (cluster_id, vector_value_id, vector_value) 
             select 
                 id as cluster_id,
                 cast([key] as int) as [vector_value_id],
@@ -182,14 +206,23 @@ class DatabaseEngine:
                 openjson([vector])    
             """, 
             params)
+        
         _logger.info("Creating columnstore index...")
         cursor.execute(f"""
-            create clustered columnstore index ixcc on {self._clusters_centroids_table_fqname} order (cluster_id, vector_value_id) with (maxdop = 1)                     
+            create clustered columnstore index ixcc on {self._clusters_centroids_tmp_table_fqname} order (cluster_id, vector_value_id) with (maxdop = 1)                     
         """)
         cursor.commit()
-        cursor.close()
+        
+        _logger.info("Switching to final centroids table...")
+        cursor.execute(f"""
+                       drop table if exists {self._clusters_centroids_table_fqname};
+                       alter schema [$vector] transfer {self._clusters_centroids_tmp_table_fqname};
+                       """)
+        cursor.commit()
+
+        cursor.close()        
         conn.close()
-        _logger.info("Columnstore index created.")
+       
         _logger.info("Centroids saved.")
 
     def save_clusters_items(self, ids, labels):
@@ -199,20 +232,39 @@ class DatabaseEngine:
         conn = pyodbc.connect(self._connection_string)         
         cursor = conn.cursor()  
         cursor.fast_executemany = True
+
         _logger.info(f"Saving centroids elements into {self._clusters_table_fqname}...")        
         cursor.execute(f"drop table if exists {self._clusters_table_fqname}")
         cursor.execute(f"""
-            create table {self._clusters_table_fqname} (
-                cluster_id int not null,
-                item_id int not null        
-            )
-        """)
-        cursor.executemany(f"insert into {self._clusters_table_fqname} (item_id, cluster_id) values (?, ?)", params)
+            if object_id('{self._clusters_table_fqname}') is null begin
+                create table {self._clusters_table_fqname} (
+                    cluster_id int not null,
+                    item_id int not null        
+                )
+            end   
+            drop table if exists {self._clusters_tmp_table_fqname} 
+            create table {self._clusters_tmp_table_fqname}
+                (
+                    cluster_id int not null,
+                    item_id int not null    
+                )                        
+        """)        
+        cursor.executemany(f"insert into {self._clusters_tmp_table_fqname} (item_id, cluster_id) values (?, ?)", params)
+        cursor.commit()
+
         _logger.info("Creating index...")
         cursor.execute(f"create clustered index ixc on {self._clusters_table_fqname} (item_id, cluster_id)")
+        cursor.commit()
+        
+        _logger.info("Switching to final centroids elements table...")
+        cursor.execute(f"""
+                       drop table if exists {self._clusters_table_fqname};
+                       alter schema [$vector] transfer {self._clusters_tmp_table_fqname};
+                       """)
+        cursor.commit()
+
         cursor.close()
-        conn.commit()
-        _logger.info("Index created.")
+        conn.commit()        
         _logger.info("Centroids elements saved.")
 
     def create_similarity_function(self):

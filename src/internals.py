@@ -1,3 +1,4 @@
+from db.index import NoIndex
 from pydantic import BaseModel
 
 class TableInfo(BaseModel):
@@ -16,4 +17,16 @@ class IndexRequest(BaseModel):
     column: ColumnInfo = None
     vector: VectorInfo = None
 
-    
+class State:
+    def __init__(self) -> None:
+        self.index = NoIndex()
+        self.status = "idle"
+
+    def set_status(self, status:str):   
+        self.status = status
+
+    def get_status(self)->str:
+        return self.status  
+
+    def clear(self):
+        self.index = NoIndex()
