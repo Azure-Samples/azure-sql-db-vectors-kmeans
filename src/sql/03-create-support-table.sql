@@ -1,6 +1,3 @@
-use vectordb
-go
-
 /*
     Extract vectors values as descrived in https://github.com/Azure-Samples/azure-sql-db-openai
 */

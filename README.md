@@ -1,4 +1,14 @@
-# Project Name
+# Azure SQL DB Vector - KMeans Compute Node
+
+- import wikipedia zip and save it in src/sample-data
+
+- set MSSQL variable
+
+- azd up
+
+
+https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/manage-environment-variables
+
 
 (short, 1-3 sentenced, description of the project)
 

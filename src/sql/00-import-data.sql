@@ -1,6 +1,3 @@
-use vectordb
-go
-
 /*
 	Import data
 */
