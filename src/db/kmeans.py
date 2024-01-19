@@ -5,7 +5,7 @@ import pickle
 import logging
 import numpy as np
 from .index import BaseIndex
-from .database import DatabaseEngine
+from .database import DatabaseEngine, DatabaseEngineException
 from .utils import DataSourceConfig
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.preprocessing import normalize
@@ -23,16 +23,30 @@ class KMeansIndexIdMap:
         self.dimensions_count:int = dimensions_count
 
 class KMeansIndex(BaseIndex):
-    def __init__(self, config:DataSourceConfig) -> None:
+    def __init__(self) -> None:
         super().__init__()
         self.index = None
-        self._db = DatabaseEngine(config=config)
+        self._db = None
+   
+    def from_config(config:DataSourceConfig):
+        index = KMeansIndex()
+        index._db = DatabaseEngine.from_config(config)
+        return index
 
-    def initialize_build(self)->int:
-        self._db.initialize();
-        id = self._db.create_index_metadata()
-        self.id = id
-        _logger.info(f"Index has been assigned id {id}.")
+    def from_id(id:int):
+        index = KMeansIndex()
+        index._db = DatabaseEngine()
+        return index
+    
+    def initialize_build(self, force: bool)->int:
+        id = None
+        try:
+            self._db.initialize();
+            id = self._db.create_index_metadata(force)
+            self.id = id
+            _logger.info(f"Index has id {id}.")
+        except DatabaseEngineException as e:
+            raise Exception(f"Error initializing index: {str(e)}")
         return id
 
     def build(self):

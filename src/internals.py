@@ -2,20 +2,20 @@ from db.index import NoIndex
 from pydantic import BaseModel
 
 class TableInfo(BaseModel):
-    schema: str = None
-    table: str = None
+    schema: str
+    table: str
 
 class ColumnInfo(BaseModel):
-    id: str = None
-    vector: str = None
+    id: str 
+    vector: str
 
 class VectorInfo(BaseModel):
-    dimensions: int = None
+    dimensions: int
 
 class IndexRequest(BaseModel):
-    table: TableInfo = None
-    column: ColumnInfo = None
-    vector: VectorInfo = None
+    table: TableInfo
+    column: ColumnInfo
+    vector: VectorInfo 
 
 class State:
     def __init__(self) -> None:
@@ -26,7 +26,11 @@ class State:
         self.status = status
 
     def get_status(self)->str:
-        return self.status  
+        return {
+            "status": self.status,
+            "index_id": self.index.id
+        }  
 
     def clear(self):
+        self.status = "idle"
         self.index = NoIndex()

@@ -6,11 +6,16 @@ from .utils import Buffer, VectorSet, NpEncoder, DataSourceConfig
 
 _logger = logging.getLogger("uvicorn")
 
-class DatabaseEngine:
+class DatabaseEngineException(Exception):
+    pass
 
-    def __init__(self, config:DataSourceConfig) -> None:
+class DatabaseEngine:
+    def __init__(self) -> None:
         self._connection_string = os.environ["MSSQL"]
         self._index_id = None
+       
+    def from_config(config:DataSourceConfig):
+        self = DatabaseEngine()
         self._source_table_schema = config.source_table_schema
         self._source_table_name = config.source_table_name
         self._source_id_column_name = config.source_id_column_name
@@ -24,6 +29,11 @@ class DatabaseEngine:
         self._clusters_centroids_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters_centroids]'
         self._clusters_table_fqname = f'[$vector].[{self._target_table_name}$clusters]'  
         self._clusters_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters]'  
+        return self
+
+    def from_id(id:int):
+        self = DatabaseEngine()
+        return self
 
     def initialize(self): 
         conn = pyodbc.connect(self._connection_string)
@@ -112,26 +122,55 @@ class DatabaseEngine:
         cursor.close()
         conn.close()
 
-    def create_index_metadata(self) -> int:
+    def create_index_metadata(self, force: bool) -> int:
         id = None
         conn = pyodbc.connect(self._connection_string) 
 
         try:
             cursor = conn.cursor()  
+            
             id = cursor.execute("""
-                set nocount on;
-                insert into [$vector].[kmeans] 
-                    ([source_table_name], [id_column_name], [vector_column_name], [status], [updated_on])
-                values
-                    (?, ?, ?, 'INITIALIZING', sysdatetime());
-                select scope_identity() as id;
+                select id from [$vector].[kmeans] where [source_table_name] = ? and [vector_column_name] = ?;
                 """,
                 self._source_table_fqname,
-                self._source_id_column_name,
-                self._source_vector_column_name  
+                self._source_vector_column_name
             ).fetchval()
-            cursor.close()
-            conn.commit()
+            if (id != None):
+                if (force == False):
+                    raise DatabaseEngineException(f"Index for {self._source_table_fqname}.{self._source_vector_column_name} already exists.")
+                else:
+                    _logger.info(f"Index creation forced over existing index {id}...")
+            
+            if (id == None):
+                _logger.info(f"Registering new index...")
+                id = cursor.execute("""
+                    set nocount on;
+                    insert into [$vector].[kmeans] 
+                        ([source_table_name], [id_column_name], [vector_column_name], [status], [updated_on])
+                    values
+                        (?, ?, ?, 'INITIALIZING', sysdatetime());
+                    select scope_identity() as id;
+                    """,
+                    self._source_table_fqname,
+                    self._source_id_column_name,
+                    self._source_vector_column_name  
+                ).fetchval()
+            else:
+                _logger.info(f"Updating existing index...")
+                cursor.execute("""
+                    update 
+                        [$vector].[kmeans] 
+                    set
+                        [status] = 'INITIALIZING',
+                        [item_count] = null,       
+                        [updated_on] = sysdatetime()
+                    where 
+                        id = ?;
+                    """,
+                    id
+                )
+
+            cursor.commit()
         finally:
             conn.close()
         
