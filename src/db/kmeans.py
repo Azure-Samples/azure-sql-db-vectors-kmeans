@@ -35,7 +35,7 @@ class KMeansIndex(BaseIndex):
 
     def from_id(id:int):
         index = KMeansIndex()
-        index._db = DatabaseEngine()
+        index._db = DatabaseEngine.from_id(id)
         return index
     
     def initialize_build(self, force: bool)->int:

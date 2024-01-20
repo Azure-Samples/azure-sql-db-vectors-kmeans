@@ -15,12 +15,51 @@ class DatabaseEngine:
         self._index_id = None
        
     def from_config(config:DataSourceConfig):
-        self = DatabaseEngine()
-        self._source_table_schema = config.source_table_schema
-        self._source_table_name = config.source_table_name
-        self._source_id_column_name = config.source_id_column_name
-        self._source_vector_column_name = config.source_vector_column_name
-        self._vector_dimensions = config.vector_dimensions        
+        db = DatabaseEngine()
+        db._source_table_schema = config.source_table_schema
+        db._source_table_name = config.source_table_name
+        db._source_id_column_name = config.source_id_column_name
+        db._source_vector_column_name = config.source_vector_column_name
+        db._vector_dimensions = config.vector_dimensions        
+        db.initialize_internal_variables()
+        return db
+
+    def from_id(id:int):
+        db = DatabaseEngine()
+        conn = pyodbc.connect(db._connection_string) 
+
+        cursor = conn.cursor()  
+        cursor.execute("""
+            select 
+                parsename(source_table_name, 2) as source_schema_name,
+                parsename(source_table_name, 1) as source_table_name,
+                id_column_name,
+                vector_column_name,
+                dimensions_count as vector_dimensions
+            from 
+                [$vector].[kmeans] 
+            where 
+                id = ?
+            and
+                status = 'CREATED';""", id)
+        row = cursor.fetchone()
+
+        if (row == None):
+            raise DatabaseEngineException(f"Index #{id} not found.")
+
+        db._source_table_schema = str(row.source_schema_name)
+        db._source_table_name = str(row.source_table_name)
+        db._source_id_column_name = str(row.id_column_name)
+        db._source_vector_column_name = str(row.vector_column_name)
+        db._vector_dimensions = int(row.vector_dimensions)
+        cursor.close()
+        conn.close()
+        
+        db.initialize_internal_variables()
+
+        return db
+    
+    def initialize_internal_variables(self):
         self._source_table_fqname = f'[{self._source_table_schema}].[{self._source_table_name}]'
         self._target_table_name = f'{self._source_table_name}${self._source_vector_column_name}'
         self._function_fqname=f'[$vector].[find_similar${self._target_table_name}]'
@@ -29,11 +68,6 @@ class DatabaseEngine:
         self._clusters_centroids_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters_centroids]'
         self._clusters_table_fqname = f'[$vector].[{self._target_table_name}$clusters]'  
         self._clusters_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters]'  
-        return self
-
-    def from_id(id:int):
-        self = DatabaseEngine()
-        return self
 
     def initialize(self): 
         conn = pyodbc.connect(self._connection_string)
@@ -54,6 +88,7 @@ class DatabaseEngine:
                         [id_column_name] sysname not null,
                         [vector_column_name] sysname not null,
                         [item_count] int null,
+                        [dimensions_count] int null,
                         [status] varchar(100) not null,
                         [updated_on] datetime2 not null,
                         primary key nonclustered ([id]),
@@ -91,11 +126,13 @@ class DatabaseEngine:
                 [$vector].[kmeans] 
             set
                 [item_count] = ?,
-                [status] = 'CREATED',
+                [dimensions_count] = ?,
+                [status] = 'CREATED',                
                 [updated_on] = sysdatetime()
             where 
                 id = ?;""", 
             vectors_count, 
+            self._vector_dimensions,
             self._index_id, 
             )
         conn.commit()
@@ -146,14 +183,15 @@ class DatabaseEngine:
                 id = cursor.execute("""
                     set nocount on;
                     insert into [$vector].[kmeans] 
-                        ([source_table_name], [id_column_name], [vector_column_name], [status], [updated_on])
+                        ([source_table_name], [id_column_name], [vector_column_name], [dimensions_count], [status], [updated_on])
                     values
-                        (?, ?, ?, 'INITIALIZING', sysdatetime());
+                        (?, ?, ?, ?, 'INITIALIZING', sysdatetime());
                     select scope_identity() as id;
                     """,
                     self._source_table_fqname,
                     self._source_id_column_name,
-                    self._source_vector_column_name  
+                    self._source_vector_column_name,
+                    self._vector_dimensions  
                 ).fetchval()
             else:
                 _logger.info(f"Updating existing index...")
@@ -162,7 +200,7 @@ class DatabaseEngine:
                         [$vector].[kmeans] 
                     set
                         [status] = 'INITIALIZING',
-                        [item_count] = null,       
+                        [item_count] = null,                            
                         [updated_on] = sysdatetime()
                     where 
                         id = ?;
