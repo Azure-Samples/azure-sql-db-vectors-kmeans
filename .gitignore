@@ -402,3 +402,4 @@ FodyWeavers.xsd
 sample-data/
 .env
 .deploy.env
+.azure
