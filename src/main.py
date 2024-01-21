@@ -41,18 +41,20 @@ def build(tasks: BackgroundTasks, indexRequest: IndexRequest, force: bool = Fals
         raise HTTPException(detail=f"An index (#{state.index.id}) is already being built.", status_code=500)
       
     config = DataSourceConfig()
-    config.source_table_schema = indexRequest.table.schema
-    config.source_table_name = indexRequest.table.table
+    config.source_table_schema = indexRequest.table.table_schema
+    config.source_table_name = indexRequest.table.table_name
     config.source_id_column_name = indexRequest.column.id
-    config.source_vector_column_name = indexRequest.column.vector 
+    config.source_vector_column_name = indexRequest.column.vector
     config.vector_dimensions = indexRequest.vector.dimensions
-    state.index = KMeansIndex.from_config(config)
-
+  
     id = None
     try:
         state.set_status("initializing")
+        state.index = KMeansIndex.from_config(config)
         id = state.index.initialize_build(force)
     except Exception as e:
+        _logger.error(f"Error during initialization: {e}")
+        state.set_status("error during initialization: " + str(e))
         state.clear()
         raise HTTPException(detail=str(e), status_code=500)
 
@@ -76,6 +78,8 @@ def rebuild(tasks: BackgroundTasks, index_id: int):
         state.set_status("initializing")
         id = state.index.initialize_build(force=True)
     except Exception as e:
+        _logger.error(f"Error during initialization: {e}")
+        state.set_status("error during initialization: " + str(e))
         state.clear()
         raise HTTPException(detail=str(e), status_code=500)
 
@@ -95,5 +99,6 @@ def _internal_build():
         state.index.build()
     except Exception as e:
         _logger.error(f"Error building index: {e}")
+        state.set_status("error during index build: " + str(e))
     finally:
         state.clear()

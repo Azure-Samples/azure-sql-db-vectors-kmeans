@@ -1,36 +1,42 @@
 from db.index import NoIndex
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class TableInfo(BaseModel):
-    schema: str
-    table: str
+    table_schema: str = Field(alias="schema")
+    table_name: str = Field(alias="name")
 
 class ColumnInfo(BaseModel):
     id: str 
-    vector: str
+    vector: str 
 
 class VectorInfo(BaseModel):
     dimensions: int
 
 class IndexRequest(BaseModel):
-    table: TableInfo
+    table: TableInfo 
     column: ColumnInfo
-    vector: VectorInfo 
+    vector: VectorInfo
 
 class State:
     def __init__(self) -> None:
         self.index = NoIndex()
-        self.status = "idle"
+        self.current_status = "idle"
+        self.last_status = "idle"
 
     def set_status(self, status:str):   
-        self.status = status
+        self.last_status = self.current_status
+        self.current_status = status
 
     def get_status(self)->str:
         return {
-            "status": self.status,
+            "status": {
+                "current": self.current_status,
+                "last": self.last_status
+            },
             "index_id": self.index.id
         }  
 
     def clear(self):
-        self.status = "idle"
+        self.last_status = self.current_status
+        self.current_status = "idle"
         self.index = NoIndex()

@@ -16,12 +16,13 @@ class DatabaseEngine:
        
     def from_config(config:DataSourceConfig):
         db = DatabaseEngine()
-        db._source_table_schema = config.source_table_schema
-        db._source_table_name = config.source_table_name
-        db._source_id_column_name = config.source_id_column_name
-        db._source_vector_column_name = config.source_vector_column_name
-        db._vector_dimensions = config.vector_dimensions        
+        db._source_table_schema:str = config.source_table_schema
+        db._source_table_name:str = config.source_table_name
+        db._source_id_column_name:str = config.source_id_column_name
+        db._source_vector_column_name:str = config.source_vector_column_name
+        db._vector_dimensions:str = config.vector_dimensions             
         db.initialize_internal_variables()
+        db.validate_database_objects()
         return db
 
     def from_id(id:int):
@@ -56,10 +57,38 @@ class DatabaseEngine:
         conn.close()
         
         db.initialize_internal_variables()
+        db.validate_database_objects()
 
         return db
+
+    def validate_config(self):
+        c = {
+            "table_schema": self._source_table_schema,
+            "table_name": self._source_table_name,
+            "id_column_name": self._source_id_column_name,
+            "vector_column_name": self._source_vector_column_name,
+            "vector_dimensions": self._vector_dimensions
+        }
+
+        _logger.info(f"Configuration: {json.dumps(c)}...")
+
+        if (self._source_table_schema == None):
+            raise DatabaseEngineException("Source table schema not defined.")
+        
+        if (self._source_table_name == None):
+            raise DatabaseEngineException("Source table name not defined.")
     
-    def initialize_internal_variables(self):
+        if (self._source_vector_column_name == None):
+            raise DatabaseEngineException("Source vector column not defined.")
+    
+        if (self._source_id_column_name == None):
+            raise DatabaseEngineException("Source id column not defined.")
+    
+        if (self._vector_dimensions == None):
+            raise DatabaseEngineException("Expected number of dimensions for vector column not define.")    
+
+    def initialize_internal_variables(self):    
+        self.validate_config()
         self._source_table_fqname = f'[{self._source_table_schema}].[{self._source_table_name}]'
         self._target_table_name = f'{self._source_table_name}${self._source_vector_column_name}'
         self._function_fqname=f'[$vector].[find_similar${self._target_table_name}]'
@@ -68,6 +97,23 @@ class DatabaseEngine:
         self._clusters_centroids_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters_centroids]'
         self._clusters_table_fqname = f'[$vector].[{self._target_table_name}$clusters]'  
         self._clusters_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters]'  
+
+    def validate_database_objects(self):
+        conn = pyodbc.connect(self._connection_string) 
+        
+        table_id = conn.execute("select object_id(?)", self._source_table_fqname).fetchval()
+        if (table_id == None):
+            raise DatabaseEngineException(f"Source table {self._source_table_fqname} not found.")
+        
+        column_id_id = conn.execute("select [column_id] from sys.columns where [object_id] = ? and [name] = ?", table_id, self._source_id_column_name).fetchval()
+        if (column_id_id == None):
+            raise DatabaseEngineException(f"Source table column {self._source_id_column_name} not found.")
+
+        column_vector_id = conn.execute("select [column_id] from sys.columns where [object_id] = ? and [name] = ?", table_id, self._source_vector_column_name).fetchval()
+        if (column_vector_id == None):
+            raise DatabaseEngineException(f"Source table column {self._source_vector_column_name} not found.")
+        
+        conn.close()
 
     def initialize(self): 
         conn = pyodbc.connect(self._connection_string)
@@ -117,48 +163,6 @@ class DatabaseEngine:
             }
         }
     
-    def finalize_index_metadata(self, vectors_count:int):
-        conn = pyodbc.connect(self._connection_string) 
-
-        cursor = conn.cursor()  
-        cursor.execute("""
-            update 
-                [$vector].[kmeans] 
-            set
-                [item_count] = ?,
-                [dimensions_count] = ?,
-                [status] = 'CREATED',                
-                [updated_on] = sysdatetime()
-            where 
-                id = ?;""", 
-            vectors_count, 
-            self._vector_dimensions,
-            self._index_id, 
-            )
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-    
-    def update_index_metadata(self, status:str):
-        conn = pyodbc.connect(self._connection_string) 
-
-        cursor = conn.cursor()  
-        cursor.execute("""
-            update 
-                [$vector].[kmeans] 
-            set                
-                [status] = ?                
-            where 
-                id = ?;""", 
-            status, 
-            self._index_id, 
-            )
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-
     def create_index_metadata(self, force: bool) -> int:
         id = None
         conn = pyodbc.connect(self._connection_string) 
@@ -215,7 +219,48 @@ class DatabaseEngine:
         self._index_id = id
         return id
     
-    
+    def update_index_metadata(self, status:str):
+        conn = pyodbc.connect(self._connection_string) 
+
+        cursor = conn.cursor()  
+        cursor.execute("""
+            update 
+                [$vector].[kmeans] 
+            set                
+                [status] = ?                
+            where 
+                id = ?;""", 
+            status, 
+            self._index_id, 
+            )
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+    def finalize_index_metadata(self, vectors_count:int):
+        conn = pyodbc.connect(self._connection_string) 
+
+        cursor = conn.cursor()  
+        cursor.execute("""
+            update 
+                [$vector].[kmeans] 
+            set
+                [item_count] = ?,
+                [dimensions_count] = ?,
+                [status] = 'CREATED',                
+                [updated_on] = sysdatetime()
+            where 
+                id = ?;""", 
+            vectors_count, 
+            self._vector_dimensions,
+            self._index_id, 
+            )
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+  
     def load_vectors_from_db(self):            
         query = f"""
             select {self._source_id_column_name} as item_id, {self._source_vector_column_name} as vector from {self._source_table_fqname} 
