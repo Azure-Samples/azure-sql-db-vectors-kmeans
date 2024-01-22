@@ -76,7 +76,6 @@ class KMeansIndex(BaseIndex):
             kmeans.fit(nvp)
             self.index = KMeansIndexIdMap(ids, kmeans, vector_count, dimensions_count)
             _logger.info(f"Done creating kmeans model ({type(kmeans)}).") 
-
             
             _logger.info(f"Saving centroids index #{self.id}...")
             self._db.update_index_metadata("SAVING_CENTROIDS")
