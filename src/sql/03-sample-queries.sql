@@ -1,4 +1,8 @@
 /*
+** Make sure to run the script in the `vectordb` database **
+*/
+
+/*
     Sample queries
 */
 

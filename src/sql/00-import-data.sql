@@ -1,4 +1,8 @@
 /*
+** Make sure to run the script in the `vectordb` database **
+*/
+
+/*
 	Import data
 */
 bulk insert dbo.[wikipedia_articles_embeddings]

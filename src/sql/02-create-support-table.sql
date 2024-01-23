@@ -1,4 +1,8 @@
 /*
+** Make sure to run the script in the `vectordb` database **
+*/
+
+/*
     Extract vectors values as descrived in https://github.com/Azure-Samples/azure-sql-db-openai
 */
 select 

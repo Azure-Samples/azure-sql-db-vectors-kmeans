@@ -1,4 +1,8 @@
 /*
+** Make sure to run the script in the `vectordb` database **
+*/
+
+/*
 Create user to be used by python script
 */
 if (serverproperty('Edition') = 'SQL Azure') begin
