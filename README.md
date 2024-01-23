@@ -13,13 +13,8 @@ Vector data is stored in Azure SQL with no additional dependencies as shown in t
 - [Vector Search Optimization](#vector-search-optimization-via-voronoi-cells-and-inverted-file-index-aka-cell-probing)
 - [Architecture](#architecture)
 - [Run the project locally](#run-the-project-locally)
-  - [Create the MSSQL DB](#create-the-mssql-db)
-  - [Import sample dataset](#import-sample-dataset)
 - [Deploy the project to Azure](#deploy-the-project-to-azure)
-- [REST API](#rest-api)
-  - [Build Index](#build-index)
-  - [Rebuild Index](#rebuild-index)
-  - [Query API Status](#query-api-status)
+- [Use the REST API](#rest-api)
 - [Search for similar articles](#search-for-similar-articles)
 
 ## Vector Search Optimization via Voronoi Cells and Inverted File Index (aka "Cell-Probing")
@@ -53,18 +48,9 @@ The project take advantage of [Dev Container](https://code.visualstudio.com/docs
 
 Clone the repository and open it in VS Code. You'll be prompted to reopen the project in a Dev Container. Click on the "Reopen in Container" button.
 
-Once the Dev Container is ready, open a terminal and run the following commands:
+The Dev Container sets up the container needed to run Scikit Learn and also the MSSQL DB needed to store the vectors and the clusters. 
 
-```bash
-cd src
-uvicorn main:api --reload
-```
-
-and you'll be good to go. The API will be available at http://127.0.0.1:8000.
-
-### Create the MSSQL DB
-
-The Dev Container sets up the container needed to run Scikit Learn and also the MSSQL DB needed to store the vectors and the clusters. A database named `vectordb` is created automatically along with the `dbo.wikipedia_articles_embeddings` table. 
+A database named `vectordb` is created automatically along with the `dbo.wikipedia_articles_embeddings` table. 
 
 You can use [Azure Data Studio](https://learn.microsoft.com/en-us/azure-data-studio/download-azure-data-studio) to connect to the MSSQL DB and run queries against it.
 
@@ -74,18 +60,70 @@ Follow the instructions in the '/sample-data' folder to download the sample data
 
 - `src/sql/00-import-data.sql`
 
-You can now run the KMeans clustering algorithm using the following command as described in the [REST API](#REST%20API) section:
+### Run the application
+
+From a VS Code terminal, run the following command:
+
+```bash
+cd src
+uvicorn main:api
+```
+
+and you'll be good to go. The API will be available at http://127.0.0.1:8000.
+
+You can now run the KMeans clustering algorithm using the following command as described in the [REST API](#REST%20API) section.
 
 ## Deploy the project to Azure
 
-- azd init
+Deployment to Azure is done using [AZD CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
 
-- azd env set MSSQL variable
+### Install AZD CLI
 
-- azd up
+You need to install it before running and deploying with the Azure Developer CLI.
 
-https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/manage-environment-variables
+On Windows:
 
+```powershell
+powershell -ex AllSigned -c "Invoke-RestMethod 'https://aka.ms/install-azd.ps1' | Invoke-Expression"
+```
+
+On Linux/MacOS:
+
+```bash
+curl -fsSL https://aka.ms/install-azd.sh | bash
+```
+
+After logging in with the following command, you will be able to use azd cli to quickly provision and deploy the application.
+
+### Authenticate with Azure
+
+Make sure AZD CLI can access Azure resources. You can use the following command to log in to Azure:
+
+```bash
+azd auth login
+```
+
+### Deploy the application
+
+Initilize the Azure Developer CLI with the following command:
+
+```bash
+azd init
+```
+
+and then set the `MSSQL` variable to the connection string pointing to the Azure SQL DB:
+
+```bash
+azd env set MSSQL 'Server=tcp:<server name>.database.windows.net,1433;Initial Catalog=<database name>;Persist Security Info=False;User ID=<user id>;Password=<password>;'
+```
+
+finally deploy the application to Azure with the following command:
+
+```bash
+azd up
+```
+
+after a few minutes the container will be deployed into an Azure Container Apps and ready to accept requests.
 
 ## REST API
 
@@ -173,4 +211,16 @@ and you'll get the current status and the last status reported. The checking the
 
 ## Search for similar articles
 
-TDB
+You can use the `find_similar` function that has been created as part of the index build process. For example:
+
+```sql
+-- Store the vector represeting 'Isaac Asimov' in a variable
+declare @v nvarchar(max);
+select @v = title_vector from dbo.wikipedia_articles_embeddings where title = 'Isaac Asimov';
+
+-- Find the 10 most similar articles to 'Isaac Asimov' based on the title vector
+-- searching only in the closest cluster
+select top (10) * from [$vector].find_similar$wikipedia_articles_embeddings$title_vector(@v, 1, 0.75) order by  cosine_similarity desc
+```
+
+
