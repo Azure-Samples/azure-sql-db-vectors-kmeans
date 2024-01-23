@@ -16,7 +16,7 @@ go
     create login
 */
 if not exists(select * from sys.server_principals where [name] = 'vectordb_user') begin
-    create login [vectordb_user] with password = 'kOZ0I9DZ_mu4JXyETWH@2VQ8ovNQYOcmriJYEh9o=';
+    create login [vectordb_user] with password = 'rANd0m_PAzzw0rd!';
 end
 go
 
@@ -43,23 +43,5 @@ if (object_id('[dbo].[wikipedia_articles_embeddings]') is null) begin
         [content_vector] [varchar](max) not null,
         [vector_id] [int] not null
     )
-end
-go
-
-/*
-	enable change tracking
-*/
-if not exists(select * from sys.change_tracking_databases where database_id = db_id())
-begin
-    alter database vectordb
-    set change_tracking = on
-    (change_retention = 30 days, auto_cleanup = on)
-end
-go
-
-if not exists(select * from sys.change_tracking_tables where [object_id]=object_id('dbo.wikipedia_articles_embeddings'))
-begin
-    alter table dbo.wikipedia_articles_embeddings
-    enable change_tracking
 end
 go
