@@ -4,7 +4,9 @@ Perform Approximate Nearest Neighbor (ANN) search on a vector column in Azure SQ
 
 As KMeans clustering is a compute intensive operation, this project uses SciKit Learn library to perform the clustering and stores the results in a SQL DB table. The results are then used to perform ANN search on the vector column.
 
-To make the integration with SQL DB seamless, this project uses Azure Container Apps and expose the KMeans clustering as a REST API.
+To make the integration with SQL DB seamless, this project uses Azure Container Apps and expose the KMeans clustering as a REST API. The entire repository can be deployed to Azure using the [free services](https://azure.microsoft.com/en-us/pricing/free-services):
+
+![Azure Free Services](./_assets/sql-aca-free-tiers.png)
 
 Vector data is stored in Azure SQL with no additional dependencies as shown in this repository: https://github.com/Azure-Samples/azure-sql-db-openai. The same dataset is used also in this project.
 
@@ -15,7 +17,7 @@ Vector data is stored in Azure SQL with no additional dependencies as shown in t
 - [Run the project locally](#run-the-project-locally)
 - [Deploy the project to Azure](#deploy-the-project-to-azure)
 - [Use the REST API](#rest-api)
-- [Search for similar articles](#search-for-similar-articles)
+- [Search for similar vectors](#search-for-similar-vectors)
 
 ## Vector Search Optimization via Voronoi Cells and Inverted File Index (aka "Cell-Probing")
 
@@ -73,7 +75,7 @@ uvicorn main:api
 
 and you'll be good to go. The API will be available at http://127.0.0.1:8000.
 
-You can now run the KMeans clustering algorithm using the following command as described in the [REST API](#REST%20API) section.
+You can now run the KMeans clustering algorithm using the commands as described in the [REST API](#REST%20API) section.
 
 ## Deploy the project to Azure
 
@@ -252,7 +254,7 @@ Checking the last status is useful to understand if an error occurred during the
 
 You can also check the index build status by quering the `[$vector].[kmeans]` table.
 
-## Search for similar articles
+## Search for similar vectors
 
 You can use the `find_similar` function that has been created as part of the index build process. For example:
 
