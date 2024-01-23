@@ -46,9 +46,7 @@ else:
 
 The project take advantage of [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) to run the project locally. Make sure to have Docker Desktop installed and running on your machine.
 
-Clone the repository and open it in VS Code. You'll be prompted to reopen the project in a Dev Container. Click on the "Reopen in Container" button.
-
-The Dev Container sets up the container needed to run Scikit Learn and also the MSSQL DB needed to store the vectors and the clusters. 
+Clone the repository and open it in VS Code. You'll be prompted to reopen the project in a Dev Container. Click on the "Reopen in Container" button. The Dev Container sets up the container needed to run Scikit Learn and also the MSSQL DB needed to store the vectors and the clusters. 
 
 A database named `vectordb` is created automatically along with the `dbo.wikipedia_articles_embeddings` table. 
 
@@ -59,6 +57,10 @@ You can use [Azure Data Studio](https://learn.microsoft.com/en-us/azure-data-stu
 Follow the instructions in the '/sample-data' folder to download the sample dataset. Once the `vector_database_wikipedia_articles_embedded.csv` is available you can import it into the MSSQL database using the script 
 
 - `src/sql/00-import-data.sql`
+
+and then create the supporting table to store vector values in an expanded columnstore format:
+
+- `src/sql/02-create-support-table.sql`
 
 ### Run the application
 
@@ -103,9 +105,23 @@ Make sure AZD CLI can access Azure resources. You can use the following command 
 azd auth login
 ```
 
+### Deploy the database
+
+Follow the steps defined ni the [Azure SQL DB OpenAI](https://github.com/Azure-Samples/azure-sql-db-openai?tab=readme-ov-file#download-and-import-the-wikipedia-article-with-vector-embeddings) repository to deploy the database and import the sample dataset. And the end of the process you'll have a table named `dbo.wikipedia_articles_embeddings` with the vector data.
+
+Then use the following script
+
+- `src/sql/01-create-user.sql`
+
+to create a user that will be used by Python to access the database.
+
+and then create the supporting table to store vector values in an expanded columnstore format:
+
+- `src/sql/02-create-support-table.sql`
+
 ### Deploy the application
 
-Initilize the Azure Developer CLI with the following command:
+Initialize the Azure Developer CLI with the following command:
 
 ```bash
 azd init
@@ -174,9 +190,19 @@ POST /kmeans/build
 }
 ```
 
-The API would verify that the request is correct and then start the build process asynchrously returning the id assigned to the index being created:
+The API would verify that the request is correct and then start the build process asynchronously returning the id assigned to the index being created:
 
 ```
+{
+  "id": 1,
+  "status": {
+    "status": {
+      "current": "initializing",
+      "last": "idle"
+    },
+    "index_id": "1"
+  }
+}
 ```
 
 And index on the same table and vector column already exists, the API would return an error. If you want to force the creation of a new index over the existing one you can use the `force` option:
@@ -196,7 +222,7 @@ POST /kmeans/rebuild/<index id>
 for example, to rebuild the index with id 1:
 
 ```http
-POST /kmeans/rebuild/1`
+POST /kmeans/rebuild/1
 ```
 
 ### Query API Status
@@ -207,7 +233,24 @@ The status of the build process can be checked using the Server Status API:
 GET /
 ```
 
-and you'll get the current status and the last status reported. The checking the last status is useful to understand if an error occurred during the build process.
+and you'll get the current status and the last status reported:
+
+```json
+{
+  "server": {
+    "status": {
+      "current": "building",
+      "last": "initializing"
+    },
+    "index_id": 1
+  },
+  "version": "0.0.1"
+}
+```
+
+Checking the last status is useful to understand if an error occurred during the build process.
+
+You can also check the index build status by quering the `[$vector].[kmeans]` table.
 
 ## Search for similar articles
 
