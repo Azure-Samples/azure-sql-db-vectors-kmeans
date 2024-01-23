@@ -399,7 +399,8 @@ FodyWeavers.xsd
 
 # Custom
 .venv/
-sample-data/
+*.csv
+*.zip
 .env
 .deploy.env
 .azure
