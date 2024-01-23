@@ -21,7 +21,7 @@ Vector data is stored in Azure SQL with no additional dependencies as shown in t
 
 ## Vector Search Optimization via Voronoi Cells and Inverted File Index (aka "Cell-Probing")
 
-Given a vector, finding the most similar vector among all those stored in a database is a common problem in many applications. The easiest approach to solve this problem is to use a brute force approach, which is to compute the distance between the query vector and all the vectors stored in the database. This is a good approach when the number of vectors is not extremely big, and dimensionality of vectors is not very high, as it guarantees *perfect [recall](https://en.wikipedia.org/wiki/Precision_and_recall)*, meaning that all relevat items that should be returned are actually returned.
+Given a vector, finding the most similar vector among all those stored in a database is a common problem in many applications. The easiest approach to solve this problem is to use a brute force approach, which is to compute the distance between the query vector and all the vectors stored in the database. This is a good approach when the number of vectors is not extremely big, and dimensionality of vectors is not very high, as it guarantees *perfect [recall](https://en.wikipedia.org/wiki/Precision_and_recall)*, meaning that all relevant items that should be returned are actually returned.
 
 Unfortunately this approach is not scalable as the number of vectors stored in the database increases, so you may want to exchange a perfect recall for much better performances. This is where *approximate nearest neighbor* (ANN) search comes into play. ANN search algorithms are able to return the most similar vectors to the query vector, but they do not guarantee perfect recall. In other words, they may return less vectors than all the relevant to the query vector, but they are much faster than the brute force approach.
 
@@ -56,7 +56,7 @@ You can use [Azure Data Studio](https://learn.microsoft.com/en-us/azure-data-stu
 
 ### Import sample dataset
 
-Follow the instructions in the '/sample-data' folder to download the sample dataset. Once the `vector_database_wikipedia_articles_embedded.csv` is available you can import it into the MSSQL database using the script 
+Follow the instructions in the `/sample-data` folder to download the sample dataset. Once the `vector_database_wikipedia_articles_embedded.csv` is available you can import it into the MSSQL database using the script 
 
 - `src/sql/00-import-data.sql`
 
@@ -173,7 +173,7 @@ To build an index from scratch, the Build API expects the following payload:
 }
 ```
 
-Using the aformentioned wikipedia dataset, the payload would be:
+Using the aforementioned wikipedia dataset, the payload would be:
 
 ```http
 POST /kmeans/build
@@ -215,7 +215,7 @@ POST /kmeans/build?force=true
 
 ### Rebuild Index
 
-If you need to rebuild an existing index, you can use the Rebuild API. The API doesn't need a payload as it will use the existing index definition. Just like the build process, also the rebuild process is asychronous. The index to be rebuilt is specifed via URL path:
+If you need to rebuild an existing index, you can use the Rebuild API. The API doesn't need a payload as it will use the existing index definition. Just like the build process, also the rebuild process is asynchronous. The index to be rebuilt is specified via URL path:
 
 ```
 POST /kmeans/rebuild/<index id>
@@ -252,14 +252,14 @@ and you'll get the current status and the last status reported:
 
 Checking the last status is useful to understand if an error occurred during the build process.
 
-You can also check the index build status by quering the `[$vector].[kmeans]` table.
+You can also check the index build status by querying the `[$vector].[kmeans]` table.
 
 ## Search for similar vectors
 
 You can use the `find_similar` function that has been created as part of the index build process. For example:
 
 ```sql
--- Store the vector represeting 'Isaac Asimov' in a variable
+-- Store the vector representing 'Isaac Asimov' in a variable
 declare @v nvarchar(max);
 select @v = title_vector from dbo.wikipedia_articles_embeddings where title = 'Isaac Asimov';
 
