@@ -10,6 +10,8 @@ To make the integration with SQL DB seamless, this project uses Azure Container 
 
 Vector data is stored in Azure SQL with no additional dependencies as shown in this repository: https://github.com/Azure-Samples/azure-sql-db-openai. The same dataset is used also in this project.
 
+IF you want to experiment without using Azure, the project [can be fully run locally](#run-the-project-locally) using [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) and Docker.
+
 ## Table of Contents
 
 - [Vector Search Optimization](#vector-search-optimization-via-voronoi-cells-and-inverted-file-index-aka-cell-probing)
@@ -60,9 +62,9 @@ Once the model has been trained, the identified clusters and centroids - and thu
 
 The data stored back SQL DB is the following
 
-- [$vector].[kmeans]: stores information about created indexes
-- [$vector].[<table_name>$<column_name>$clusters_centroids]: stores the centroids
-- [$vector].[<table_name>$<column_name>$clusters]: the IVF structure, associating each centroid to the list of vectors assigned to it
+- `[$vector].[kmeans]`: stores information about created indexes
+- `[$vector].[<table_name>$<column_name>$clusters_centroids]`: stores the centroids
+- `[$vector].[<table_name>$<column_name>$clusters]`: the IVF structure, associating each centroid to the list of vectors assigned to it
 
 ## Run the project locally
 
