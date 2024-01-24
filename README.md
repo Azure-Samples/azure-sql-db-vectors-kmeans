@@ -60,11 +60,15 @@ Once the model has been trained, the identified clusters and centroids - and thu
 
 ![Three](./_assets/sql-kmeans-3.png)
 
-The data stored back SQL DB is the following
+The data stored back into SQL DB using the following tables:
 
 - `[$vector].[kmeans]`: stores information about created indexes
 - `[$vector].[<table_name>$<column_name>$clusters_centroids]`: stores the centroids
 - `[$vector].[<table_name>$<column_name>$clusters]`: the IVF structure, associating each centroid to the list of vectors assigned to it
+
+to make the search even easier a function is created also:
+
+- `[$vector].[find_similar$wikipedia_articles_embeddings$content_vector](<vector>, <probe cells count>, <similarity threshold>)`: the function to perform ANN search
 
 ## Run the project locally
 
@@ -85,6 +89,12 @@ Follow the instructions in the `/sample-data` folder to download the sample data
 and then create the supporting table to store vector values in an expanded columnstore format:
 
 - `src/sql/02-create-support-table.sql`
+
+Attention: if you want to use a table of yours instead of the provided sample dataset, please make sure the the columns names in the supporting table are 
+
+- `item_id`
+- `vector_value_id`
+- `vector_value`
 
 ### Run the application
 
@@ -131,7 +141,7 @@ azd auth login
 
 ### Deploy the database
 
-Follow the steps defined ni the [Azure SQL DB OpenAI](https://github.com/Azure-Samples/azure-sql-db-openai?tab=readme-ov-file#download-and-import-the-wikipedia-article-with-vector-embeddings) repository to deploy the database and import the sample dataset. And the end of the process you'll have a table named `dbo.wikipedia_articles_embeddings` with the vector data.
+Follow the steps defined in the [Azure SQL DB OpenAI](https://github.com/Azure-Samples/azure-sql-db-openai?tab=readme-ov-file#download-and-import-the-wikipedia-article-with-vector-embeddings) repository to deploy the database and import the sample dataset. And the end of the process you'll have a table named `dbo.wikipedia_articles_embeddings` with the vector data.
 
 Then use the following script
 
@@ -139,9 +149,15 @@ Then use the following script
 
 to create a user that will be used by Python to access the database.
 
-and then create the supporting table to store vector values in an expanded columnstore format:
+and then create the supporting table to store vector values in an expanded columnstore format
 
 - `src/sql/02-create-support-table.sql`
+
+Attention: if you want to use a table of yours instead of the provided sample dataset, please make sure the the columns names in the supporting table are 
+
+- `item_id`
+- `vector_value_id`
+- `vector_value`
 
 ### Deploy the application
 
@@ -297,6 +313,12 @@ The `find_similar` function takes 3 parameters:
 - the similarity threshold
 
 The similarity threshold is used to filter out vectors that are not similar enough to the query vector. The higher the threshold, the more similar the vectors returned will be. The number of clusters to search in is used to speed up the search. The higher the number of clusters, the more similar the vectors returned will be. The lower the number of clusters, the faster the search will be.
+
+## Performances
+
+As visible in this gif, the performance improvement is quite substantial. The gif shows the execution of the `find_similar` function with different number of probed clusters. 
+
+![Performance](./_assets/sql-kmeans-performance.gif)
 
 ## References
 
