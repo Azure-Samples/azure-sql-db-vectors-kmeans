@@ -27,7 +27,7 @@ Unfortunately this approach is not scalable as the number of vectors stored in t
 
 To speed up the search, it is possible to split the vectors into groups, making sure the create groups so that all vectors that are someone similar to each other are put in the same group. This is the idea behind *Voronoi cells*. 
 
-TODO: VORONOI CELLS IMAGE
+![Voronoi Cells, Image from Wikipedia](./_assets/wikipedia-voronoi_diagram.png)
 
 The idea is to create a set of *centroids* (i.e. vectors) and then assign each vector to the closest centroid. This way, all vectors that are similar to each other will be assigned to the same centroid. This is a very fast operation, as it is just a matter of computing the distance between the vector and all the centroids and then assign the vector to the closest centroid. Once all vectors are assigned to a centroid, it is possible to create a *inverted file index* that maps each centroid to the list of vectors assigned to it. This way, when a query vector is given, it is possible to find the closest centroid and then return all the vectors assigned to it. This is much faster than computing the distance between the query vector and all the vectors stored in the database.
 
@@ -44,15 +44,35 @@ else:
 
 ## Architecture
 
+The architecture of the project is very simple as it is composed of a single container that exposes a REST API to build and rebuild the index and to search for similar vectors. The container is deployed to Azure Container Apps and uses Azure SQL DB to store the vectors and the clusters. 
+
+The idea is that compute intensive operations, like calculating KMeans, can be offloaded to dedicated container that is easy to deploy, quick to start and  offers serverless scaling for the best performance/cost ratio.
+
+![One](./_assets/sql-kmeans-1.png)
+
+Once the container is running it is completely independent from the database and can do its work without affecting database performances at all. Even better, if more scalability is needed, data can be partitioned across multiple container instances to achieve parallelism
+
+![Two](./_assets/sql-kmeans-2.png)
+
+Once the model has been trained, the identified clusters and centroids - and thus the IVF index - are saved back to the SQL DB so that they can be used to perform ANN search on the vector column without the need for the container to remain active. If fact, the container can be stopped completely as SQL DB is completely autonomous now.
+
+![Three](./_assets/sql-kmeans-3.png)
+
+The data stored back SQL DB is the following
+
+- [$vector].[kmeans]: stores information about created indexes
+- [$vector].[<table_name>$<column_name>$clusters_centroids]: stores the centroids
+- [$vector].[<table_name>$<column_name>$clusters]: the IVF structure, associating each centroid to the list of vectors assigned to it
+
 ## Run the project locally
 
 The project take advantage of [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) to run the project locally. Make sure to have Docker Desktop installed and running on your machine.
 
-Clone the repository and open it in VS Code. You'll be prompted to reopen the project in a Dev Container. Click on the "Reopen in Container" button. The Dev Container sets up the container needed to run Scikit Learn and also the MSSQL DB needed to store the vectors and the clusters. 
+Clone the repository and open it in VS Code. You'll be prompted to reopen the project in a Dev Container. Click on the "Reopen in Container" button. The Dev Container sets up the container needed to run Scikit Learn and also the SQL DB needed to store the vectors and the clusters. 
 
 A database named `vectordb` is created automatically along with the `dbo.wikipedia_articles_embeddings` table. 
 
-You can use [Azure Data Studio](https://learn.microsoft.com/en-us/azure-data-studio/download-azure-data-studio) to connect to the MSSQL DB and run queries against it.
+You can use [Azure Data Studio](https://learn.microsoft.com/en-us/azure-data-studio/download-azure-data-studio) to connect to the SQL DB and run queries against it.
 
 ### Import sample dataset
 
@@ -256,7 +276,7 @@ You can also check the index build status by querying the `[$vector].[kmeans]` t
 
 ## Search for similar vectors
 
-You can use the `find_similar` function that has been created as part of the index build process. For example:
+Once you have built the index, you can search for similar vectors. Using the sample dataset, you can search for the 10 most similar articles to 'Isaac Asimov' using the `find_similar` function that has been created as part of the index build process. For example:
 
 ```sql
 -- Store the vector representing 'Isaac Asimov' in a variable
@@ -268,4 +288,14 @@ select @v = title_vector from dbo.wikipedia_articles_embeddings where title = 'I
 select top (10) * from [$vector].find_similar$wikipedia_articles_embeddings$title_vector(@v, 1, 0.75) order by  cosine_similarity desc
 ```
 
+The `find_similar` function takes 3 parameters:
 
+- the vector to search for
+- the number of clusters to search in
+- the similarity threshold
+
+The similarity threshold is used to filter out vectors that are not similar enough to the query vector. The higher the threshold, the more similar the vectors returned will be. The number of clusters to search in is used to speed up the search. The higher the number of clusters, the more similar the vectors returned will be. The lower the number of clusters, the faster the search will be.
+
+## References
+
+The Voronoi Cells image is from Wikipedia: https://en.wikipedia.org/wiki/Voronoi_diagram#/media/File:Euclidean_Voronoi_diagram.svg, used under the [CC BY-SA 4.0 DEED](https://creativecommons.org/licenses/by-sa/4.0/) license.
