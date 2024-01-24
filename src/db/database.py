@@ -270,6 +270,7 @@ class DatabaseEngine:
         conn = pyodbc.connect(self._connection_string) 
         cursor = conn.cursor()
         cursor.execute(query)
+        tr = 0
         while(True):
             buffer.clear()    
             rows = cursor.fetchmany(10000)
@@ -281,9 +282,10 @@ class DatabaseEngine:
                 buffer.add(row.item_id, json.loads(row.vector))
             
             result.add(buffer)            
+            tr += (idx+1)
 
             mf = int(result.get_memory_usage() / 1024 / 1024)
-            _logger.info("Loaded {0} rows, total memory footprint {1} MB".format(idx+1, mf))        
+            _logger.info("Loaded {0} rows, total rows {1}, total memory footprint {2} MB".format(idx+1, tr, mf))        
 
         cursor.close()
         conn.commit()
@@ -411,7 +413,7 @@ class DatabaseEngine:
         (
             select 
                 v2.cluster_id, 
-                sum(v1.[vector_value] * v2.[vector_value]) as cosine_similarity              
+                sum(v1.[vector_value] * v2.[vector_value]) as dot_product              
             from 
                 cteVectorInput v1
             inner join 
@@ -430,13 +432,13 @@ class DatabaseEngine:
             inner join 
                 {self._clusters_table_fqname} c on e.item_id = c.item_id
             where
-                c.cluster_id in (select top(@probe) cluster_id from cteCentroids order by cosine_similarity desc)
+                c.cluster_id in (select top(@probe) cluster_id from cteCentroids order by dot_product desc)
         ), 
         cteIds as 
         (
             select
                 v2.id, 
-                sum(v1.[vector_value] * v2.[vector_value]) as cosine_similarity              
+                sum(v1.[vector_value] * v2.[vector_value]) as dot_product              
             from 
                 cteVectorInput v1
             inner join 
@@ -445,13 +447,13 @@ class DatabaseEngine:
                 v2.id
         )
         select
-            a.id, a.title, c.cosine_similarity
+            a.*, c.dot_product
         from
             cteIds c
         inner join  
             {self._source_table_fqname} a on c.id = a.id
         where 
-            cosine_similarity > @similarity;
+            dot_product > @similarity;
         """)
         cursor.close()
         conn.commit()
