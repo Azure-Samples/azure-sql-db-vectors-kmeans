@@ -70,6 +70,8 @@ to make the search even easier a function is created also:
 
 - `[$vector].[find_similar$wikipedia_articles_embeddings$content_vector](<vector>, <probe cells count>, <similarity threshold>)`: the function to perform ANN search
 
+The function calculates the dot product which is the same as the cosine similarity if vectors are normalized to 1.
+
 ## Run the project locally
 
 The project take advantage of [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) to run the project locally. Make sure to have Docker Desktop installed and running on your machine.
