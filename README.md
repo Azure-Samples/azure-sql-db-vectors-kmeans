@@ -109,7 +109,7 @@ uvicorn main:api
 
 and you'll be good to go. The API will be available at http://127.0.0.1:8000.
 
-You can now run the KMeans clustering algorithm using the commands as described in the [REST API](#REST%20API) section.
+You can now run the KMeans clustering algorithm using the commands as described in the [REST API](#rest-api) section.
 
 ## Deploy the project to Azure
 
