@@ -305,7 +305,7 @@ select @v = title_vector from dbo.wikipedia_articles_embeddings where title = 'I
 
 -- Find the 10 most similar articles to 'Isaac Asimov' based on the title vector
 -- searching only in the closest cluster
-select top (10) * from [$vector].find_similar$wikipedia_articles_embeddings$title_vector(@v, 1, 0.75) order by  cosine_similarity desc
+select top (10) * from [$vector].find_similar$wikipedia_articles_embeddings$title_vector(@v, 1, 0.75) order by dot_product desc
 ```
 
 The `find_similar` function takes 3 parameters:
