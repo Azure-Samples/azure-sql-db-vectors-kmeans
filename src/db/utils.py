@@ -1,6 +1,34 @@
 import json
 import numpy as np
+import struct
 from enum import StrEnum, Enum
+
+
+def array_to_vector(a:list[float])->bytearray:
+    # header
+    b = bytearray([169, 170])
+
+    # number of items
+    b += bytearray(struct.pack("i", len(a)))
+    pf = f"{len(a)}f"
+
+    # filler
+    b += bytearray([0,0])
+
+    # items
+    b += bytearray(struct.pack(pf, *a))
+
+    return b
+
+def vector_to_array(b:bytearray)->list[float]:
+    # header
+    h = struct.unpack_from("2B", b, 0)    
+    assert h == (169,170)
+
+    c = int(struct.unpack_from("i", b, 2)[0])
+    pf = f"{c}f"
+    a = struct.unpack_from(pf, b, 8)
+    return a
 
 class DataSourceConfig:
     source_table_schema:str

@@ -2,7 +2,7 @@ import os
 import pyodbc
 import logging
 import json
-from .utils import Buffer, VectorSet, NpEncoder, DataSourceConfig
+from .utils import Buffer, VectorSet, NpEncoder, DataSourceConfig, array_to_vector, vector_to_array
 
 _logger = logging.getLogger("uvicorn")
 
@@ -273,13 +273,12 @@ class DatabaseEngine:
         tr = 0
         while(True):
             buffer.clear()    
-            rows = cursor.fetchmany(10000)
+            rows = cursor.fetchmany(50000)
             if (rows == []):
-                _logger.info("Done")
                 break
 
             for idx, row in enumerate(rows):
-                buffer.add(row.item_id, json.loads(row.vector))
+                buffer.add(row.item_id, vector_to_array(row.vector))
             
             result.add(buffer)            
             tr += (idx+1)
@@ -295,7 +294,7 @@ class DatabaseEngine:
     def save_clusters_centroids(self, centroids):                
         conn = pyodbc.connect(self._connection_string)         
         cursor = conn.cursor()  
-        params = [(i, json.dumps(centroids[i], cls=NpEncoder)) for i in range(0, len(centroids))]
+        params = [(i, array_to_vector(centroids[i])) for i in range(0, len(centroids))]
         cursor = conn.cursor()
         
         #cursor.fast_executemany = True        
@@ -305,36 +304,24 @@ class DatabaseEngine:
                 create table {self._clusters_centroids_table_fqname}
                 (
                     cluster_id int not null,
-                    vector_value_id int not null,
-                    vector_value float not null
+                    centroid varbinary(8000) not null
                 )
             end   
             drop table if exists {self._clusters_centroids_tmp_table_fqname} 
             create table {self._clusters_centroids_tmp_table_fqname}
                 (
                     cluster_id int not null,
-                    vector_value_id int not null,
-                    vector_value float not null
+                    centroid varbinary(8000) not null
                 )
             """)
         cursor.commit()
         cursor.executemany(f"""    
-            insert into {self._clusters_centroids_tmp_table_fqname} (cluster_id, vector_value_id, vector_value) 
-            select 
-                id as cluster_id,
-                cast([key] as int) as [vector_value_id],
-                cast([value] as float) as [vector_value]
-            from
-                (values (?, ?)) T(id, vector)
-            cross apply
-                openjson([vector])    
+            insert into {self._clusters_centroids_tmp_table_fqname} (cluster_id, centroid) values (?, ?)
             """, 
             params)
         
         _logger.info("Creating columnstore index...")
-        cursor.execute(f"""
-            create clustered columnstore index ixcc on {self._clusters_centroids_tmp_table_fqname} order (cluster_id, vector_value_id) with (maxdop = 1)                     
-        """)
+
         cursor.commit()
         
         _logger.info("Switching to final centroids table...")
@@ -458,3 +445,5 @@ class DatabaseEngine:
         cursor.close()
         conn.commit()
         _logger.info(f"Function created.")
+
+    
