@@ -7,7 +7,7 @@ import numpy as np
 from .index import BaseIndex
 from .database import DatabaseEngine, DatabaseEngineException
 from .utils import DataSourceConfig
-from sklearn.cluster import MiniBatchKMeans, KMeans
+from sklearn.cluster import MiniBatchKMeans
 from sklearn.preprocessing import normalize
 
 _logger = logging.getLogger("uvicorn")
@@ -26,7 +26,7 @@ class KMeansIndex(BaseIndex):
     def __init__(self) -> None:
         super().__init__()
         self.index = None
-        self._db = None
+        self._db:DatabaseEngine = None
    
     def from_config(config:DataSourceConfig):
         index = KMeansIndex()
@@ -73,7 +73,7 @@ class KMeansIndex(BaseIndex):
             else:
                 clusters = int(vector_count / 1000)
             _logger.info(f"Determining {clusters} clusters...")        
-            kmeans = KMeans(init="k-means++", n_clusters=clusters)             
+            kmeans = MiniBatchKMeans(init="k-means++", n_clusters=clusters)             
             kmeans.fit(nvp)
             self.index = KMeansIndexIdMap(ids, kmeans, vector_count, dimensions_count)
             
@@ -95,7 +95,7 @@ class KMeansIndex(BaseIndex):
 
             _logger.info(f"Creating similarity function...")
             self._db.update_index_metadata("CREATING_SIMILARITY_FUNCTION")
-            #self._db.create_similarity_function()
+            self._db.create_similarity_function()
             _logger.info(f"Done creating similarity function.")
             
             _logger.info(f"Finalizing index #{self.id} metadata...")
