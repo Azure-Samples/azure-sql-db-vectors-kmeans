@@ -56,7 +56,7 @@ class KMeansIndex(BaseIndex):
         try:
             self.index = None
             
-            _logger.info(f"Starting created index...")
+            _logger.info(f"Starting creating IVFFLAT index...")
 
             _logger.info("Loading data...")
             self._db.update_index_metadata("LOADING_DATA")
@@ -102,7 +102,7 @@ class KMeansIndex(BaseIndex):
             self._db.finalize_index_metadata(self.index.vectors_count)
             _logger.info(f"Done finalizing metadata.")
 
-            _logger.info(f"Index #{self.id} created.")
+            _logger.info(f"IVFFLAT Index #{self.id} created.")
         except Exception as e:  
             self._db.update_index_metadata("ERROR_DURING_CREATION")
             raise e    

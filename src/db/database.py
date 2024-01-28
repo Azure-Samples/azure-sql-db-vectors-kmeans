@@ -286,14 +286,14 @@ class DatabaseEngine:
             if object_id('{self._clusters_centroids_table_fqname}') is null begin
                 create table {self._clusters_centroids_table_fqname}
                 (
-                    cluster_id int not null,
+                    cluster_id int not null primary key clustered,
                     centroid varbinary(8000) not null
                 )
             end   
             drop table if exists {self._clusters_centroids_tmp_table_fqname} 
             create table {self._clusters_centroids_tmp_table_fqname}
             (
-                cluster_id int not null,
+                cluster_id int not null primary key clustered,
                 centroid varbinary(8000) not null
             )
             """)
@@ -346,7 +346,7 @@ class DatabaseEngine:
         cursor.commit()
 
         _logger.info("Creating index...")
-        cursor.execute(f"create clustered index ixc on {self._clusters_table_fqname} (item_id, cluster_id)")
+        cursor.execute(f"create clustered columnstore index ixcc on {self._clusters_tmp_table_fqname}")
         cursor.commit()
         
         _logger.info("Switching to final centroids elements table...")
