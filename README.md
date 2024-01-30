@@ -20,6 +20,8 @@ IF you want to experiment without using Azure, the project [can be fully run loc
 - [Deploy the project to Azure](#deploy-the-project-to-azure)
 - [Use the REST API](#rest-api)
 - [Search for similar vectors](#search-for-similar-vectors)
+- [Performances](#performances)
+- [Adding a new vector](#adding-a-new-vector)
 
 ## Vector Search Optimization via Voronoi Cells and Inverted File Index (aka "Cell-Probing")
 
@@ -68,9 +70,15 @@ The data stored back into SQL DB using the following tables:
 
 to make the search even easier a function is created also:
 
-- `[$vector].[find_similar$wikipedia_articles_embeddings$content_vector](<vector>, <probe cells count>, <similarity threshold>)`: the function to perform ANN search
+- `[$vector].[find_similar$<table_name>$<column_name>](<vector>, <probe cells count>, <similarity threshold>)`: the function to perform ANN search
 
 The function calculates the dot product which is the same as the cosine similarity if vectors are normalized to 1.
+
+Also the function:
+
+- `[$vector].[find_cluster$<table_name>$<column_name>](<vector>): find the cluster of a given vector
+
+is provided as it is needed to insert new vectors into the IVF index.
 
 ## Run the project locally
 
@@ -321,6 +329,12 @@ The similarity threshold is used to filter out vectors that are not similar enou
 As visible in this gif, the performance improvement is quite substantial. The gif shows the execution of the `find_similar` function with different number of probed clusters. 
 
 ![Performance](./_assets/sql-kmeans-performance.gif)
+
+## Adding a new vector
+
+To add a new vector to the index, you can use the `find_cluster` function to find the cluster of the new vector and then insert the vector into the corresponding cluster. A full example is provided in the `src/sql/06-add-new-vector.sql` script.
+
+Adding a new vector to the index can deteriorate the quality of the index as new centroids are not calculated, so it is recommended to rebuild the index after adding a significant number of new vectors, to create new centroids and reassign the vectors to the new centroids.
 
 ## References
 
