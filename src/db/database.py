@@ -91,7 +91,8 @@ class DatabaseEngine:
         self.validate_config()
         self._source_table_fqname = f'[{self._source_table_schema}].[{self._source_table_name}]'
         self._target_table_name = f'{self._source_table_name}${self._source_vector_column_name}'
-        self._function_fqname=f'[$vector].[find_similar${self._target_table_name}]'
+        self._function1_fqname=f'[$vector].[find_similar${self._target_table_name}]'
+        self._function2_fqname=f'[$vector].[find_cluster${self._target_table_name}]'
         self._embeddings_table_fqname = f'[{self._source_table_schema}].[{self._target_table_name}]'
         self._clusters_centroids_table_fqname = f'[$vector].[{self._target_table_name}$clusters_centroids]'
         self._clusters_centroids_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters_centroids]'
@@ -146,22 +147,6 @@ class DatabaseEngine:
             conn.commit()
         finally:
             conn.close()
-        
-    def get_info(self):
-        return {
-            "id": self._index_id,
-            "source":{
-                "table": self._source_table_fqname,
-                "vector_column": self._source_vector_column_name,
-                "id_column": self._source_id_column_name
-            },
-            "target":{
-                "vector_table": self._embeddings_table_fqname,
-                "cluster_centroids_table": self._clusters_centroids_table_fqname,
-                "cluster_table": self._clusters_table_fqname,
-                "function": self._function_fqname
-            }
-        }
     
     def create_index_metadata(self, force: bool) -> int:
         id = None
@@ -395,10 +380,10 @@ class DatabaseEngine:
         conn = pyodbc.connect(self._connection_string)         
         cursor = conn.cursor()  
         
-        _logger.info(f"Creating function {self._function_fqname}...")
+        _logger.info(f"Creating function {self._function1_fqname}...")
         cursor = conn.cursor()
         cursor.execute(f"""
-        create or alter function {self._function_fqname} (@vector nvarchar(max), @probe int, @similarity float)
+        create or alter function {self._function1_fqname} (@vector nvarchar(max), @probe int, @similarity float)
         returns table
         as return
         with cteVectorInput as
@@ -454,6 +439,47 @@ class DatabaseEngine:
             {self._source_table_fqname} a on c.id = a.id
         where 
             dot_product > @similarity;
+        """)
+        cursor.close()
+        conn.commit()
+        _logger.info(f"Function created.")
+
+    def create_find_cluster_function(self):
+        conn = pyodbc.connect(self._connection_string)         
+        cursor = conn.cursor()  
+        
+        _logger.info(f"Creating function {self._function2_fqname}...")
+        cursor = conn.cursor()
+        cursor.execute(f"""
+        create or alter function {self._function2_fqname} (@vector nvarchar(max))
+        returns table
+        as return
+        with cteVectorInput as
+        (
+            select 
+                cast([key] as smallint) as vector_value_id, 
+                cast([value] as float) as vector_value
+            from
+                openjson(@vector) as t
+        ),
+        cteCentroids as
+        (
+            select 
+                v2.cluster_id, 
+                sum(v1.[vector_value] * v2.[vector_value]) as dot_product              
+            from 
+                cteVectorInput v1
+            inner join 
+                {self._clusters_centroids_table_fqname} v2 on v1.vector_value_id = v2.vector_value_id
+            group by
+                v2.cluster_id
+        )
+        select top(1)
+            cluster_id
+        from
+            cteCentroids c        
+        order by
+            dot_product desc
         """)
         cursor.close()
         conn.commit()

@@ -20,5 +20,7 @@ go
 /*
     Create clustered columnstore index
 */
-create clustered columnstore index ixcc on [dbo].[wikipedia_articles_embeddings$content_vector] order (item_id, vector_value_id) with (maxdop = 1)        
+create clustered columnstore index ixcc 
+on [dbo].[wikipedia_articles_embeddings$content_vector] order (item_id, vector_value_id) 
+with (maxdop = 1)        
 go

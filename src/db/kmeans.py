@@ -95,6 +95,11 @@ class KMeansIndex(BaseIndex):
             self._db.update_index_metadata("CREATING_SIMILARITY_FUNCTION")
             self._db.create_similarity_function()
             _logger.info(f"Done creating similarity function.")
+
+            _logger.info(f"Creating similarity function...")
+            self._db.update_index_metadata("CREATING_FIND_CLUSTER_FUNCTION")
+            self._db.create_find_cluster_function()
+            _logger.info(f"Done creating similarity function.")
             
             _logger.info(f"Finalizing index #{self.id} metadata...")
             self._db.finalize_index_metadata(self.index.vectors_count)
