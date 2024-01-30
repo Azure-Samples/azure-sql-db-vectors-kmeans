@@ -76,7 +76,7 @@ The function calculates the dot product which is the same as the cosine similari
 
 Also the function:
 
-- `[$vector].[find_cluster$<table_name>$<column_name>](<vector>): find the cluster of a given vector
+- `[$vector].[find_cluster$<table_name>$<column_name>](<vector>)`: find the cluster of a given vector
 
 is provided as it is needed to insert new vectors into the IVF index.
 
