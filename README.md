@@ -309,11 +309,11 @@ Once you have built the index, you can search for similar vectors. Using the sam
 ```sql
 -- Store the vector representing 'Isaac Asimov' in a variable
 declare @v nvarchar(max);
-select @v = title_vector from dbo.wikipedia_articles_embeddings where title = 'Isaac Asimov';
+select @v = content_vector from dbo.wikipedia_articles_embeddings where title = 'Isaac Asimov';
 
 -- Find the 10 most similar articles to 'Isaac Asimov' based on the title vector
 -- searching only in the closest cluster
-select top (10) * from [$vector].find_similar$wikipedia_articles_embeddings$title_vector(@v, 1, 0.75) order by dot_product desc
+select top (10) * from [$vector].find_similar$wikipedia_articles_embeddings$content_vector(@v, 1, 0.75) order by dot_product desc
 ```
 
 The `find_similar` function takes 3 parameters:
