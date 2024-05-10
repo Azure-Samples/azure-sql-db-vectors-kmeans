@@ -1,4 +1,4 @@
-FROM continuumio/miniconda3
+FROM continuumio/miniconda3:24.1.2-0
 
 # apt-get and system utilities
 RUN apt-get update && apt-get install -y \
