@@ -12,6 +12,8 @@ Vector data is stored in Azure SQL with no additional dependencies as shown in t
 
 Azure SQL database can be used to easily and quickly perform vector similarity search. There are two options for this: a native option and a classic option.
 
+## Native or Classic?
+
 The **native option** is to use the new Vector Functions, recently introduced in Azure SQL database. Vector Functions are a set of functions that can be used to perform vector operations directly in the database. 
 
 > [!NOTE]  
