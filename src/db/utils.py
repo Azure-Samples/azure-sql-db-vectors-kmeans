@@ -6,7 +6,7 @@ from enum import StrEnum, Enum
 
 def array_to_vector(a:list[float])->bytearray:
     # header
-    b = bytearray([169, 170])
+    b = bytearray([0xA9, 0x01])
 
     # number of items
     b += bytearray(struct.pack("i", len(a)))
@@ -23,7 +23,7 @@ def array_to_vector(a:list[float])->bytearray:
 def vector_to_array(b:bytearray)->list[float]:
     # header
     h = struct.unpack_from("2B", b, 0)    
-    assert h == (169,170)
+    assert h == (169,1)
 
     c = int(struct.unpack_from("i", b, 2)[0])
     pf = f"{c}f"

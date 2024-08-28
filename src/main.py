@@ -46,12 +46,11 @@ def build(tasks: BackgroundTasks, indexRequest: IndexRequest, force: bool = Fals
     config.source_id_column_name = indexRequest.column.id
     config.source_vector_column_name = indexRequest.column.vector
     config.vector_dimensions = indexRequest.vector.dimensions
-  
-    id = None
+      
     try:
         state.set_status("initializing")
         state.index = KMeansIndex.from_config(config)
-        id = state.index.initialize_build(force)
+        state.index.initialize_build(force)
     except Exception as e:
         _logger.error(f"Error during initialization: {e}")
         state.set_status("error during initialization: " + str(e))

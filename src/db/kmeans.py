@@ -71,9 +71,9 @@ class KMeansIndex(BaseIndex):
             if (vector_count > 1000000):
                 clusters = int(math.sqrt(vector_count))
             else:
-                clusters = int(vector_count / 1000)
+                clusters = int(vector_count / 1000) * 2
             _logger.info(f"Determining {clusters} clusters...")        
-            kmeans = MiniBatchKMeans(init="k-means++", n_clusters=clusters)             
+            kmeans = MiniBatchKMeans(init="k-means++", n_clusters=clusters, n_init=10, random_state=0)             
             kmeans.fit(nvp)
             self.index = KMeansIndexIdMap(ids, kmeans, vector_count, dimensions_count)
             
@@ -96,11 +96,6 @@ class KMeansIndex(BaseIndex):
             _logger.info(f"Creating similarity function...")
             self._db.update_index_metadata("CREATING_SIMILARITY_FUNCTION")
             self._db.create_similarity_function()
-            _logger.info(f"Done creating similarity function.")
-
-            _logger.info(f"Creating similarity function...")
-            self._db.update_index_metadata("CREATING_FIND_CLUSTER_FUNCTION")
-            self._db.create_find_cluster_function()
             _logger.info(f"Done creating similarity function.")
             
             _logger.info(f"Finalizing index #{self.id} metadata...")

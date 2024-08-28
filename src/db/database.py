@@ -16,11 +16,11 @@ class DatabaseEngine:
        
     def from_config(config:DataSourceConfig):
         db = DatabaseEngine()
-        db._source_table_schema:str = config.source_table_schema
-        db._source_table_name:str = config.source_table_name
-        db._source_id_column_name:str = config.source_id_column_name
-        db._source_vector_column_name:str = config.source_vector_column_name
-        db._vector_dimensions:str = config.vector_dimensions             
+        db._source_table_schema = config.source_table_schema
+        db._source_table_name = config.source_table_name
+        db._source_id_column_name = config.source_id_column_name
+        db._source_vector_column_name = config.source_vector_column_name
+        db._vector_dimensions = config.vector_dimensions             
         db.initialize_internal_variables()
         db.validate_database_objects()
         return db
@@ -346,7 +346,7 @@ class DatabaseEngine:
         cursor.commit()
 
         _logger.info("Creating index...")
-        cursor.execute(f"create clustered columnstore index ixcc on {self._clusters_tmp_table_fqname}")
+        cursor.execute(f"create clustered index ixc on {self._clusters_tmp_table_fqname} (cluster_id, item_id)")
         cursor.commit()
         
         _logger.info("Switching to final centroids elements table...")
@@ -380,17 +380,18 @@ class DatabaseEngine:
                 vector_distance('cosine', k.[centroid], @v) 
         )
         select top(@k)
-            v.*
-        from 
-            {self._clusters_table_fqname} c 
+            v.*,
+            [$distance] = vector_distance('cosine', v.{self._source_vector_column_name}, @v) 
+        from
+            cteProbes k
         inner join
-            cteProbes k on k.cluster_id = c.cluster_id
+            {self._clusters_table_fqname} c on k.cluster_id = c.cluster_id
         inner join
-             {self._source_table_fqname} v on v.id = c.item_id
+            {self._source_table_fqname} v on v.id = c.item_id
         where
-            vector_distance('cosine', v.[vector], @v) <= @d
+            vector_distance('cosine', v.{self._source_vector_column_name}, @v) <= @d
         order by
-            vector_distance('cosine', v.[vector], @v) 
+            [$distance]
         """)
         cursor.close()
         conn.commit()
