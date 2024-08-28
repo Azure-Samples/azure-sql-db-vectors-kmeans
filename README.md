@@ -10,7 +10,21 @@ To make the integration with SQL DB seamless, this project uses Azure Container 
 
 Vector data is stored in Azure SQL with no additional dependencies as shown in this repository: https://github.com/Azure-Samples/azure-sql-db-openai. The same dataset is used also in this project.
 
-IF you want to experiment without using Azure, the project [can be fully run locally](#run-the-project-locally) using [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) and Docker.
+Azure SQL database can be used to easily and quickly perform vector similarity search. There are two options for this: a native option and a classic option.
+
+The **native option** is to use the new Vector Functions, recently introduced in Azure SQL database. Vector Functions are a set of functions that can be used to perform vector operations directly in the database. 
+
+> [!NOTE]  
+> Vector Functions are in Early Adopter Preview. Get access to the preview via https://aka.ms/azuresql-vector-eap-announcement
+
+![](_assets/azure-sql-cosine-similarity-native.gif)
+
+The **classic option** is to use the classic T-SQL to perform vector operations, with the support for columnstore indexes for getting good performances.
+
+> [!IMPORTANT]  
+> This branch (the `main` branch) uses the native vector support in Azure SQL. If you want to use the classic T-SQL, switch to the `classic` branch.
+
+If you want to experiment locally, the project [can be fully run locally](#run-the-project-locally) using [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) and Docker.
 
 ## Table of Contents
 
