@@ -2,7 +2,7 @@ import os
 import pyodbc
 import logging
 import json
-from .utils import Buffer, VectorSet, NpEncoder, DataSourceConfig
+from .utils import Buffer, VectorSet, NpEncoder, DataSourceConfig, array_to_vector, vector_to_array
 
 _logger = logging.getLogger("uvicorn")
 
@@ -91,9 +91,7 @@ class DatabaseEngine:
         self.validate_config()
         self._source_table_fqname = f'[{self._source_table_schema}].[{self._source_table_name}]'
         self._target_table_name = f'{self._source_table_name}${self._source_vector_column_name}'
-        self._function1_fqname=f'[$vector].[find_similar${self._target_table_name}]'
-        self._function2_fqname=f'[$vector].[find_cluster${self._target_table_name}]'
-        self._embeddings_table_fqname = f'[{self._source_table_schema}].[{self._target_table_name}]'
+        self._function_fqname=f'[$vector].[find_similar${self._target_table_name}]'
         self._clusters_centroids_table_fqname = f'[$vector].[{self._target_table_name}$clusters_centroids]'
         self._clusters_centroids_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters_centroids]'
         self._clusters_table_fqname = f'[$vector].[{self._target_table_name}$clusters]'  
@@ -258,13 +256,12 @@ class DatabaseEngine:
         tr = 0
         while(True):
             buffer.clear()    
-            rows = cursor.fetchmany(10000)
+            rows = cursor.fetchmany(50000)
             if (rows == []):
-                _logger.info("Done")
                 break
 
             for idx, row in enumerate(rows):
-                buffer.add(row.item_id, json.loads(row.vector))
+                buffer.add(row.item_id, vector_to_array(row.vector))
             
             result.add(buffer)            
             tr += (idx+1)
@@ -280,7 +277,7 @@ class DatabaseEngine:
     def save_clusters_centroids(self, centroids):                
         conn = pyodbc.connect(self._connection_string)         
         cursor = conn.cursor()  
-        params = [(i, json.dumps(centroids[i], cls=NpEncoder)) for i in range(0, len(centroids))]
+        params = [(i, array_to_vector(centroids[i])) for i in range(0, len(centroids))]
         cursor = conn.cursor()
         
         #cursor.fast_executemany = True        
@@ -289,43 +286,30 @@ class DatabaseEngine:
             if object_id('{self._clusters_centroids_table_fqname}') is null begin
                 create table {self._clusters_centroids_table_fqname}
                 (
-                    cluster_id int not null,
-                    vector_value_id int not null,
-                    vector_value float not null
+                    cluster_id int not null primary key clustered,
+                    centroid varbinary(8000) not null
                 )
             end   
             drop table if exists {self._clusters_centroids_tmp_table_fqname} 
             create table {self._clusters_centroids_tmp_table_fqname}
-                (
-                    cluster_id int not null,
-                    vector_value_id int not null,
-                    vector_value float not null
-                )
+            (
+                cluster_id int not null primary key clustered,
+                centroid varbinary(8000) not null
+            )
             """)
         cursor.commit()
         cursor.executemany(f"""    
-            insert into {self._clusters_centroids_tmp_table_fqname} (cluster_id, vector_value_id, vector_value) 
-            select 
-                id as cluster_id,
-                cast([key] as int) as [vector_value_id],
-                cast([value] as float) as [vector_value]
-            from
-                (values (?, ?)) T(id, vector)
-            cross apply
-                openjson([vector])    
+            insert into {self._clusters_centroids_tmp_table_fqname} (cluster_id, centroid) values (?, ?)
             """, 
             params)
-        
-        _logger.info("Creating columnstore index...")
-        cursor.execute(f"""
-            create clustered columnstore index ixcc on {self._clusters_centroids_tmp_table_fqname} order (cluster_id, vector_value_id) with (maxdop = 1)                     
-        """)
         cursor.commit()
         
         _logger.info("Switching to final centroids table...")
         cursor.execute(f"""
+                       begin tran;
                        drop table if exists {self._clusters_centroids_table_fqname};
                        alter schema [$vector] transfer {self._clusters_centroids_tmp_table_fqname};
+                       commit tran;
                        """)
         cursor.commit()
 
@@ -362,7 +346,7 @@ class DatabaseEngine:
         cursor.commit()
 
         _logger.info("Creating index...")
-        cursor.execute(f"create clustered index ixc on {self._clusters_table_fqname} (item_id, cluster_id)")
+        cursor.execute(f"create clustered columnstore index ixcc on {self._clusters_tmp_table_fqname}")
         cursor.commit()
         
         _logger.info("Switching to final centroids elements table...")
@@ -383,103 +367,30 @@ class DatabaseEngine:
         _logger.info(f"Creating function {self._function1_fqname}...")
         cursor = conn.cursor()
         cursor.execute(f"""
-        create or alter function {self._function1_fqname} (@vector nvarchar(max), @probe int, @similarity float)
+        create or alter function {self._function_fqname} (@v varbinary(8000), @k int, @p int, @d float)
         returns table
         as return
-        with cteVectorInput as
+        with cteProbes as
         (
-            select 
-                cast([key] as smallint) as vector_value_id, 
-                cast([value] as float) as vector_value
-            from
-                openjson(@vector) as t
-        ),
-        cteCentroids as
-        (
-            select 
-                v2.cluster_id, 
-                sum(v1.[vector_value] * v2.[vector_value]) as dot_product              
+            select top (@p)
+                k.cluster_id
             from 
-                cteVectorInput v1
-            inner join 
-                {self._clusters_centroids_table_fqname} v2 on v1.vector_value_id = v2.vector_value_id
-            group by
-                v2.cluster_id
-        ),
-        cteVectorContent as
-        (
-            select 
-                e.item_id as id,
-                vector_value_id, 
-                vector_value
-            from 
-                {self._embeddings_table_fqname} e
-            inner join 
-                {self._clusters_table_fqname} c on e.item_id = c.item_id
-            where
-                c.cluster_id in (select top(@probe) cluster_id from cteCentroids order by dot_product desc)
-        ), 
-        cteIds as 
-        (
-            select
-                v2.id, 
-                sum(v1.[vector_value] * v2.[vector_value]) as dot_product              
-            from 
-                cteVectorInput v1
-            inner join 
-                cteVectorContent v2 on v1.vector_value_id = v2.vector_value_id
-            group by
-                v2.id
+                {self._clusters_centroids_table_fqname} k
+            order by
+                vector_distance('cosine', k.[centroid], @v) 
         )
-        select
-            a.*, c.dot_product
-        from
-            cteIds c
-        inner join  
-            {self._source_table_fqname} a on c.id = a.id
-        where 
-            dot_product > @similarity;
-        """)
-        cursor.close()
-        conn.commit()
-        _logger.info(f"Function created.")
-
-    def create_find_cluster_function(self):
-        conn = pyodbc.connect(self._connection_string)         
-        cursor = conn.cursor()  
-        
-        _logger.info(f"Creating function {self._function2_fqname}...")
-        cursor = conn.cursor()
-        cursor.execute(f"""
-        create or alter function {self._function2_fqname} (@vector nvarchar(max))
-        returns table
-        as return
-        with cteVectorInput as
-        (
-            select 
-                cast([key] as smallint) as vector_value_id, 
-                cast([value] as float) as vector_value
-            from
-                openjson(@vector) as t
-        ),
-        cteCentroids as
-        (
-            select 
-                v2.cluster_id, 
-                sum(v1.[vector_value] * v2.[vector_value]) as dot_product              
-            from 
-                cteVectorInput v1
-            inner join 
-                {self._clusters_centroids_table_fqname} v2 on v1.vector_value_id = v2.vector_value_id
-            group by
-                v2.cluster_id
-        )
-        select top(1)
-            cluster_id
-        from
-            cteCentroids c        
+        select top(@k)
+            v.*
+        from 
+            {self._clusters_table_fqname} c 
+        inner join
+            cteProbes k on k.cluster_id = c.cluster_id
+        inner join
+             {self._source_table_fqname} v on v.id = c.item_id
+        where
+            vector_distance('cosine', v.[vector], @v) <= @d
         order by
-            dot_product desc
+            vector_distance('cosine', v.[vector], @v) 
         """)
         cursor.close()
         conn.commit()

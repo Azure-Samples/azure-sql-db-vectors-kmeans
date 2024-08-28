@@ -26,7 +26,7 @@ class KMeansIndex(BaseIndex):
     def __init__(self) -> None:
         super().__init__()
         self.index = None
-        self._db = None
+        self._db:DatabaseEngine = None
    
     def from_config(config:DataSourceConfig):
         index = KMeansIndex()
@@ -56,11 +56,12 @@ class KMeansIndex(BaseIndex):
         try:
             self.index = None
             
-            _logger.info(f"Starting created index...")
+            _logger.info(f"Starting creating IVFFLAT index...")
 
             _logger.info("Loading data...")
             self._db.update_index_metadata("LOADING_DATA")
             ids, vectors = self._db.load_vectors_from_db()
+            _logger.info("Done loading data...")
             
             _logger.info("Creating kmeans model...")
             self._db.update_index_metadata("KMEANS_CLUSTERING")
@@ -70,11 +71,12 @@ class KMeansIndex(BaseIndex):
             if (vector_count > 1000000):
                 clusters = int(math.sqrt(vector_count))
             else:
-                clusters = int(vector_count / 1000) * 2
+                clusters = int(vector_count / 1000)
             _logger.info(f"Determining {clusters} clusters...")        
-            kmeans = MiniBatchKMeans(init="k-means++", n_clusters=clusters, n_init=10, random_state=0) 
+            kmeans = MiniBatchKMeans(init="k-means++", n_clusters=clusters)             
             kmeans.fit(nvp)
             self.index = KMeansIndexIdMap(ids, kmeans, vector_count, dimensions_count)
+            
             _logger.info(f"Done creating kmeans model ({type(kmeans)}).") 
             
             _logger.info(f"Saving centroids index #{self.id}...")
@@ -105,7 +107,7 @@ class KMeansIndex(BaseIndex):
             self._db.finalize_index_metadata(self.index.vectors_count)
             _logger.info(f"Done finalizing metadata.")
 
-            _logger.info(f"Index #{self.id} created.")
+            _logger.info(f"IVFFLAT Index #{self.id} created.")
         except Exception as e:  
             self._db.update_index_metadata("ERROR_DURING_CREATION")
             raise e    

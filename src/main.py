@@ -13,7 +13,7 @@ from internals import IndexRequest, State
 
 load_dotenv()
 
-api_version = "0.0.1"
+api_version = "0.0.2"
 
 _logger = logging.getLogger("uvicorn")
 
@@ -60,10 +60,7 @@ def build(tasks: BackgroundTasks, indexRequest: IndexRequest, force: bool = Fals
 
     tasks.add_task(_internal_build) 
 
-    r = {
-            "id": int(id),
-            "status": state.get_status()
-        }
+    r = state.get_status()
     j = json.dumps(r, default=str)
 
     return Response(content=j, status_code=202, media_type='application/json')
@@ -85,10 +82,7 @@ def rebuild(tasks: BackgroundTasks, index_id: int):
 
     tasks.add_task(_internal_build) 
 
-    r = {
-            "id": int(id),
-            "status": state.get_status()
-        }
+    r = state.get_status()
     j = json.dumps(r, default=str)
 
     return Response(content=j, status_code=202, media_type='application/json')
