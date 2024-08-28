@@ -364,7 +364,7 @@ class DatabaseEngine:
         conn = pyodbc.connect(self._connection_string)         
         cursor = conn.cursor()  
         
-        _logger.info(f"Creating function {self._function1_fqname}...")
+        _logger.info(f"Creating function {self._function_fqname}...")
         cursor = conn.cursor()
         cursor.execute(f"""
         create or alter function {self._function_fqname} (@v varbinary(8000), @k int, @p int, @d float)
@@ -395,3 +395,5 @@ class DatabaseEngine:
         cursor.close()
         conn.commit()
         _logger.info(f"Function created.")
+
+    
