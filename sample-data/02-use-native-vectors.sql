@@ -6,7 +6,8 @@ add title_vector_ada2 varbinary(8000);
 
 alter table wikipedia_articles_embeddings
 add content_vector_ada2 varbinary(8000);
-
+go
+	
 /*
     Update the native vectors
 */
