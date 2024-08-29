@@ -10,7 +10,7 @@ To make the integration with SQL DB seamless, this project uses Azure Container 
 
 Vector data is stored in Azure SQL with no additional dependencies as shown in this repository: https://github.com/Azure-Samples/azure-sql-db-openai. The same dataset is used also in this project.
 
-Azure SQL database can be used to easily and quickly perform vector similarity search. There are two options for this: a native option and a classic option.
+Azure SQL database can be used to easily and quickly perform vector similarity search. There are two options for this: a *native* option and a *classic* option.
 
 ## Native or Classic?
 
@@ -26,7 +26,7 @@ The **classic option** is to use the classic T-SQL to perform vector operations,
 > [!IMPORTANT]  
 > This branch (the `main` branch) uses the native vector support in Azure SQL. If you want to use the classic T-SQL, switch to the `classic` branch.
 
-If you want to experiment locally, the project [can be fully run locally](#run-the-project-locally) using [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) and Docker.
+If you want to experiment locally, the project [can be run locally](#run-the-project-locally) using [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) and Docker.
 
 ## Table of Contents
 
@@ -100,9 +100,9 @@ is provided as it is needed to insert new vectors into the IVF index.
 
 The project take advantage of [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) to run the project locally. Make sure to have Docker Desktop installed and running on your machine.
 
-Clone the repository and open it in VS Code. You'll be prompted to reopen the project in a Dev Container. Click on the "Reopen in Container" button. The Dev Container sets up the container needed to run Scikit Learn and also the SQL DB needed to store the vectors and the clusters. 
+Clone the repository and open it in VS Code. You'll be prompted to reopen the project in a Dev Container. Click on the "Reopen in Container" button. The Dev Container sets up the container needed to run Scikit Learn. Since native vector support is now available only in Azure SQL, you need to have an Azure SQL DB to run this sample. You can use the free tier as mentioned at the beginning of the readme. 
 
-A database named `vectordb` is created automatically along with the `dbo.wikipedia_articles_embeddings` table. 
+Create an Azure SQL database named `vectordb` and then import the `dbo.wikipedia_articles_embeddings` table following the documentation in the [`sample_data`](../sample_data) folder before proceeding further.
 
 You can use [Azure Data Studio](https://learn.microsoft.com/en-us/azure-data-studio/download-azure-data-studio) to connect to the SQL DB and run queries against it.
 
