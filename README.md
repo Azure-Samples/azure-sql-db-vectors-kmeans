@@ -112,19 +112,9 @@ Follow the instructions in the `/sample-data` folder to download the sample data
 
 - `src/sql/00-import-data.sql`
 
-and then create the supporting table to store vector values in an expanded columnstore format:
-
-- `src/sql/02-create-support-table.sql`
-
-Attention: if you want to use a table of yours instead of the provided sample dataset, please make sure the the columns names in the supporting table are 
-
-- `item_id`
-- `vector_value_id`
-- `vector_value`
-
 ### Run the application
 
-From a VS Code terminal, run the following command:
+Create a `.env` file in `src` folder starting from the `.env.sample`. Add you server name to the connection string and then, from a VS Code terminal, run the following command:
 
 ```bash
 cd src
