@@ -171,19 +171,9 @@ Follow the steps defined in the [Azure SQL DB OpenAI](https://github.com/Azure-S
 
 Then use the following script
 
-- `src/sql/01-create-user.sql`
+- `src/sql/00-create-user.sql`
 
 to create a user that will be used by Python to access the database.
-
-and then create the supporting table to store vector values in an expanded columnstore format
-
-- `src/sql/02-create-support-table.sql`
-
-Attention: if you want to use a table of yours instead of the provided sample dataset, please make sure the the columns names in the supporting table are 
-
-- `item_id`
-- `vector_value_id`
-- `vector_value`
 
 ### Deploy the application
 
@@ -248,7 +238,7 @@ POST /kmeans/build
   },
   "column": {
     "id": "id",
-    "vector": "content_vector"
+    "vector": "title_vector_ada2"
   },
   "vector": {
     "dimensions": 1536
@@ -260,14 +250,14 @@ The API would verify that the request is correct and then start the build proces
 
 ```
 {
-  "id": 1,
-  "status": {
+  "server": {
     "status": {
       "current": "initializing",
       "last": "idle"
     },
     "index_id": "1"
-  }
+  },
+  "version": "0.0.2"
 }
 ```
 
@@ -310,7 +300,7 @@ and you'll get the current status and the last status reported:
     },
     "index_id": 1
   },
-  "version": "0.0.1"
+  "version": "0.0.2"
 }
 ```
 
@@ -324,17 +314,18 @@ Once you have built the index, you can search for similar vectors. Using the sam
 
 ```sql
 -- Store the vector representing 'Isaac Asimov' in a variable
-declare @v nvarchar(max);
+declare @v varbinary(8000);
 select @v = content_vector from dbo.wikipedia_articles_embeddings where title = 'Isaac Asimov';
 
 -- Find the 10 most similar articles to 'Isaac Asimov' based on the title vector
 -- searching only in the closest cluster
-select top (10) * from [$vector].find_similar$wikipedia_articles_embeddings$content_vector(@v, 1, 0.75) order by dot_product desc
+select * from [$vector].find_similar$wikipedia_articles_embeddings$content_vector(@v, 10, 1, 0.75) order by dot_product desc
 ```
 
 The `find_similar` function takes 3 parameters:
 
 - the vector to search for
+- the number of similar vectors to return
 - the number of clusters to search in
 - the similarity threshold
 
@@ -346,7 +337,7 @@ As visible in this gif, the performance improvement is quite substantial. The gi
 
 ![Performance](./_assets/sql-kmeans-performance.gif)
 
-## Adding a new vector
+## Adding a new vector 
 
 To add a new vector to the index, you can use the `find_cluster` function to find the cluster of the new vector and then insert the vector into the corresponding cluster. A full example is provided in the `src/sql/06-add-new-vector.sql` script.
 
