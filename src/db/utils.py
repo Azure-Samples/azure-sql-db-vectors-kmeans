@@ -1,8 +1,10 @@
 import json
-import numpy as np
 import struct
+import logging
+import numpy as np
 from enum import StrEnum, Enum
 
+_logger = logging.getLogger("uvicorn")
 
 def array_to_vector(a:list[float])->bytearray:
     # header

@@ -1,8 +1,13 @@
+import datetime
 import os
 import pyodbc
 import logging
 import json
 from .utils import Buffer, VectorSet, NpEncoder, DataSourceConfig, array_to_vector, vector_to_array
+import struct
+import logging
+from azure import identity
+from azure.core import credentials
 
 _logger = logging.getLogger("uvicorn")
 
@@ -10,9 +15,38 @@ class DatabaseEngineException(Exception):
     pass
 
 class DatabaseEngine:
-    def __init__(self) -> None:
-        self._connection_string = os.environ["MSSQL"]
+    def __init__(self) -> None:        
         self._index_id = None
+        self._token:credentials.AccessToken = None
+
+    def __get_mssql_connection(self):
+        _logger.debug('Connecting to MSSQL...')
+        
+        mssql_connection_string = os.environ["MSSQL"]    
+
+        if any(s in mssql_connection_string.lower() for s in ["uid"]):
+            _logger.debug('Using SQL Server authentication')
+            attrs_before = None
+        else:            
+            if (self._token != None and self._token.expires_on < datetime.datetime.now().timestamp()):
+                _logger.info('Token expired. Refresh is needed.')    
+                self._token = None
+
+            if (self._token == None):
+                _logger.info('Getting EntraID credentials...')    
+                mssql_connection_string = os.environ["MSSQL"]    
+                credential = identity.DefaultAzureCredential(exclude_interactive_browser_credential=False)   
+                self._token = credential.get_token("https://database.windows.net/.default")
+
+            token_bytes = self._token.token.encode("UTF-16-LE")    
+            token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+            SQL_COPT_SS_ACCESS_TOKEN = 1256  # This connection option is defined by microsoft in msodbcsql.h        
+            attrs_before = {SQL_COPT_SS_ACCESS_TOKEN: token_struct}
+
+        _logger.debug('Connecting...')    
+        conn = pyodbc.connect(mssql_connection_string, attrs_before=attrs_before)
+
+        return conn
        
     def from_config(config:DataSourceConfig):
         db = DatabaseEngine()
@@ -27,7 +61,7 @@ class DatabaseEngine:
 
     def from_id(id:int):
         db = DatabaseEngine()
-        conn = pyodbc.connect(db._connection_string) 
+        conn = db.__get_mssql_connection()
 
         cursor = conn.cursor()  
         cursor.execute("""
@@ -98,7 +132,7 @@ class DatabaseEngine:
         self._clusters_tmp_table_fqname = f'[$tmp].[{self._target_table_name}$clusters]'  
 
     def validate_database_objects(self):
-        conn = pyodbc.connect(self._connection_string) 
+        conn = self.__get_mssql_connection()
         
         table_id = conn.execute("select object_id(?)", self._source_table_fqname).fetchval()
         if (table_id == None):
@@ -115,7 +149,7 @@ class DatabaseEngine:
         conn.close()
 
     def initialize(self): 
-        conn = pyodbc.connect(self._connection_string)
+        conn = self.__get_mssql_connection()
         try:        
             cursor = conn.cursor()  
             cursor.execute(f"""
@@ -148,7 +182,7 @@ class DatabaseEngine:
     
     def create_index_metadata(self, force: bool) -> int:
         id = None
-        conn = pyodbc.connect(self._connection_string) 
+        conn = self.__get_mssql_connection()
 
         try:
             cursor = conn.cursor()  
@@ -203,7 +237,7 @@ class DatabaseEngine:
         return id
     
     def update_index_metadata(self, status:str):
-        conn = pyodbc.connect(self._connection_string) 
+        conn = self.__get_mssql_connection()
 
         cursor = conn.cursor()  
         cursor.execute("""
@@ -222,7 +256,7 @@ class DatabaseEngine:
         conn.close()
 
     def finalize_index_metadata(self, vectors_count:int):
-        conn = pyodbc.connect(self._connection_string) 
+        conn = self.__get_mssql_connection()
 
         cursor = conn.cursor()  
         cursor.execute("""
@@ -250,7 +284,7 @@ class DatabaseEngine:
         """
         buffer = Buffer()    
         result = VectorSet(self._vector_dimensions)
-        conn = pyodbc.connect(self._connection_string) 
+        conn = self.__get_mssql_connection()
         cursor = conn.cursor()
         cursor.execute(query)
         tr = 0
@@ -275,9 +309,9 @@ class DatabaseEngine:
         return result.ids, result.vectors
     
     def save_clusters_centroids(self, centroids):                
-        conn = pyodbc.connect(self._connection_string)         
+        conn = self.__get_mssql_connection()  
         cursor = conn.cursor()  
-        params = [(i, array_to_vector(centroids[i])) for i in range(0, len(centroids))]
+        params = [(i, json.dumps(centroids[i], cls=NpEncoder)) for i in range(0, len(centroids))]
         cursor = conn.cursor()
         
         #cursor.fast_executemany = True        
@@ -287,19 +321,19 @@ class DatabaseEngine:
                 create table {self._clusters_centroids_table_fqname}
                 (
                     cluster_id int not null primary key clustered,
-                    centroid varbinary(8000) not null
+                    centroid vector({self._vector_dimensions}) not null
                 )
             end   
             drop table if exists {self._clusters_centroids_tmp_table_fqname} 
             create table {self._clusters_centroids_tmp_table_fqname}
             (
                 cluster_id int not null primary key clustered,
-                centroid varbinary(8000) not null
+                centroid vector({self._vector_dimensions}) not null
             )
             """)
         cursor.commit()
         cursor.executemany(f"""    
-            insert into {self._clusters_centroids_tmp_table_fqname} (cluster_id, centroid) values (?, ?)
+            insert into {self._clusters_centroids_tmp_table_fqname} (cluster_id, centroid) values (?, cast(cast(? as nvarchar(max)) as vector({self._vector_dimensions})))
             """, 
             params)
         cursor.commit()
@@ -322,7 +356,7 @@ class DatabaseEngine:
         clustered_ids = dict(zip(ids, labels))
         params = [(int(ids[i]), int(labels[i])) for i in range(0, len(clustered_ids))]
 
-        conn = pyodbc.connect(self._connection_string)         
+        conn = self.__get_mssql_connection()       
         cursor = conn.cursor()  
         cursor.fast_executemany = True
 
@@ -361,13 +395,13 @@ class DatabaseEngine:
         _logger.info("Centroids elements saved.")
 
     def create_similarity_function(self):
-        conn = pyodbc.connect(self._connection_string)         
+        conn = self.__get_mssql_connection()
         cursor = conn.cursor()  
         
         _logger.info(f"Creating function {self._function_fqname}...")
         cursor = conn.cursor()
         cursor.execute(f"""
-        create or alter function {self._function_fqname} (@v varbinary(8000), @k int, @p int, @d float)
+        create or alter function {self._function_fqname} (@v vector({self._vector_dimensions}), @k int, @p int, @d float)
         returns table
         as return
         with cteProbes as
