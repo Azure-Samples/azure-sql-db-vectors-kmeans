@@ -3,7 +3,7 @@ import os
 import pyodbc
 import logging
 import json
-from .utils import Buffer, VectorSet, NpEncoder, DataSourceConfig, array_to_vector, vector_to_array
+from .utils import Buffer, VectorSet, NpEncoder, DataSourceConfig
 import struct
 import logging
 from azure import identity
@@ -280,7 +280,7 @@ class DatabaseEngine:
   
     def load_vectors_from_db(self):            
         query = f"""
-            select {self._source_id_column_name} as item_id, {self._source_vector_column_name} as vector from {self._source_table_fqname} 
+            select {self._source_id_column_name} as item_id, cast({self._source_vector_column_name} as varchar(max)) as vector from {self._source_table_fqname} 
         """
         buffer = Buffer()    
         result = VectorSet(self._vector_dimensions)
@@ -295,7 +295,7 @@ class DatabaseEngine:
                 break
 
             for idx, row in enumerate(rows):
-                buffer.add(row.item_id, vector_to_array(row.vector))
+                buffer.add(row.item_id, json.loads(row.vector))
             
             result.add(buffer)            
             tr += (idx+1)
@@ -333,7 +333,7 @@ class DatabaseEngine:
             """)
         cursor.commit()
         cursor.executemany(f"""    
-            insert into {self._clusters_centroids_tmp_table_fqname} (cluster_id, centroid) values (?, cast(cast(? as nvarchar(max)) as vector({self._vector_dimensions})))
+            insert into {self._clusters_centroids_tmp_table_fqname} (cluster_id, centroid) values (?, cast(? as vector({self._vector_dimensions})))
             """, 
             params)
         cursor.commit()

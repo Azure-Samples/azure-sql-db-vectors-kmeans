@@ -1,7 +1,4 @@
-import json
-import os
 import math
-import pickle
 import logging
 import numpy as np
 from .index import BaseIndex
