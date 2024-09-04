@@ -2,10 +2,10 @@
     Add columns to store the native vectors
 */
 alter table wikipedia_articles_embeddings
-add title_vector_ada2 varbinary(8000);
+add title_vector_ada2 vector(1536);
 
 alter table wikipedia_articles_embeddings
-add content_vector_ada2 varbinary(8000);
+add content_vector_ada2 vector(1536);
 go
 	
 /*
@@ -14,8 +14,8 @@ go
 update 
     wikipedia_articles_embeddings
 set 
-    title_vector_ada2 = json_array_to_vector(title_vector),
-    content_vector_ada2 = json_array_to_vector(content_vector);
+    title_vector_ada2 = cast(title_vector as vector(1536)),
+    content_vector_ada2 = cast(content_vector as vector(1536))
 go
 
 /*

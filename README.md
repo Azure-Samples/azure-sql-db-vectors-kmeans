@@ -110,7 +110,11 @@ You can use [Azure Data Studio](https://learn.microsoft.com/en-us/azure-data-stu
 
 Follow the instructions in the `/sample-data` folder to download the sample dataset. Once the `vector_database_wikipedia_articles_embedded.csv` is available you can import it into the MSSQL database using the script 
 
-- `src/sql/00-import-data.sql`
+- `src/sql/01-import-data.sql`
+
+and the alter the table to use native vectors using the script
+
+- `src/sql/02-use-native-vectors.sql`
 
 ### Run the application
 
